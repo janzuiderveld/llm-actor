@@ -15,6 +15,8 @@ class SessionPaths:
         self.session_dir = base_dir / session_name
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.transcript = self.session_dir / "transcript.jsonl"
+        self.llm_transcript = self.session_dir / "transcript.llm.jsonl"
+        self.llm_context = self.session_dir / "LLM_context.jsonl"
         self.event_log = self.session_dir / "event_log.ndjson"
         self.config_snapshot = self.session_dir / "config.snapshot.json"
         self.input_wav = self.session_dir / "in.wav"

@@ -91,8 +91,18 @@ def ensure_devices_selected(config_manager: ConfigManager) -> None:
 
     devices = list_devices()
     if not devices:
+        try:
+            import sounddevice  # type: ignore  # noqa: F401
+        except ImportError:
+            hint = (
+                "Install PortAudio and the `sounddevice` Python package, then rerun "
+                "`pip install -e .` inside your virtualenv."
+            )
+        else:
+            hint = "Verify PortAudio can enumerate devices via `python -m sounddevice`."
         raise RuntimeError(
-            "No audio devices detected. Install PortAudio or run on a system with audio hardware."
+            "No audio devices detected. Install PortAudio or run on a system with audio hardware. "
+            f"{hint}"
         )
 
     input_index = cfg.audio.input_device_index

@@ -1,0 +1,24 @@
+{
+  "audio": {
+    "input_device_index": 2,
+    "output_device_index": 3
+  },
+  "stt": {
+    "model": "deepgram-flux",
+    "language": "en-US",
+    "eager_eot_threshold": 0.5,
+    "eot_threshold": 0.85,
+    "eot_timeout_ms": 1500
+  },
+  "llm": {
+    "model": "gemini-2.5-flash",
+    "temperature": 0.6,
+    "max_tokens": 1024,
+    "system_prompt": "You are a real-time voice assistant. Speak concisely.\nTo request external actions, include them inside <...> within your reply. Keep them short and machine-readable. Do not speak the text inside <...>."
+  },
+  "tts": {
+    "voice": "aura-2-thalia-en",
+    "encoding": "linear16",
+    "sample_rate": 24000
+  }
+}

@@ -1,3 +1,19 @@
+Metadata-Version: 2.4
+Name: pipecat-thin
+Version: 0.1.0
+Summary: Thin Pipecat wrapper for Deepgram Flux → Gemini → Deepgram Aura voice pipeline
+Author: Pipecat Thin
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pipecat-ai[deepgram,google,local]
+Requires-Dist: python-dotenv
+Requires-Dist: pydantic
+Requires-Dist: sounddevice>=0.4
+Requires-Dist: typer>=0.9
+Requires-Dist: watchfiles
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
+
 # Pipecat Thin Voice Pipeline
 
 This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai/) to deliver a real-time audio loop using Deepgram Flux speech-to-text, Gemini 2.5 Flash streaming text generation, and Deepgram Aura-2 text-to-speech. All external automation hooks are exposed via append-only files under `runtime/`.
@@ -50,14 +66,6 @@ This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai
    ```
 
    Follow the prompts to pick the indices that match your microphone and speakers. The selections are stored in `runtime/config.json` for future runs.
-
-## Changing Audio Devices
-
-The input/output indices are persisted under the `audio` section of `runtime/config.json`. To switch devices after the initial run:
-
-1. Enumerate available hardware with `python -m sounddevice` (or another PortAudio-aware tool) and note the desired indices.
-2. Edit `runtime/config.json`, updating `audio.input_device_index` and `audio.output_device_index` to the new values. Setting either field to `null` (or deleting it) will cause the CLI to prompt for a fresh selection on the next launch.
-3. Save the file and restart the pipeline via `python -m app.cli` to use the new devices.
 
 ## Runtime Files
 

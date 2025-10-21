@@ -24,5 +24,16 @@ def build_google_llm(config: RuntimeConfig, api_key: str) -> GoogleLLMService:
 
 def create_google_context(llm_service: GoogleLLMService, history_messages: list[dict]) -> GoogleContextAggregatorPair:
     context = GoogleLLMContext(messages=history_messages)
-    context.system_message = llm_service._system_instruction  # type: ignore[attr-defined]
-    return llm_service.create_context_aggregators(context)
+    system_instruction = getattr(llm_service, "_system_instruction", None)
+    if system_instruction:
+        context.system_message = system_instruction  # type: ignore[attr-defined]
+
+    create_context = getattr(llm_service, "create_context_aggregator", None)
+    if callable(create_context):
+        return create_context(context)
+
+    legacy_create_context = getattr(llm_service, "create_context_aggregators", None)
+    if callable(legacy_create_context):
+        return legacy_create_context(context)
+
+    raise AttributeError("GoogleLLMService does not support context aggregator creation")

@@ -37,7 +37,11 @@ async def test_pipeline_construction_smoke():
     session_paths = new_session(config_manager.config, session_name="test-pipeline")
     event_logger = EventLogger(session_paths.event_log)
     metrics = MetricsTracker(event_logger)
-    history = ConversationHistory(session_paths.transcript)
+    history = ConversationHistory(
+        session_paths.transcript,
+        clean_transcript_path=session_paths.llm_transcript,
+        context_path=session_paths.llm_context,
+    )
 
     controller = VoicePipelineController(
         config_manager,
