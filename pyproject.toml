@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pipecat-thin"
+version = "0.1.0"
+description = "Thin Pipecat wrapper for Deepgram Flux → Gemini → Deepgram Aura voice pipeline"
+authors = [{name = "Pipecat Thin"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pipecat-ai[deepgram,google,local]",
+    "python-dotenv",
+    "pydantic",
+    "typer>=0.9",
+    "watchfiles",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
