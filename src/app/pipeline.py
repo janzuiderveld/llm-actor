@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import time
+import inspect
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from pipecat.frames.frames import (
+    AudioRawFrame,
     LLMTextFrame,
     TTSAudioRawFrame,
+    TTSStartedFrame,
     TTSStoppedFrame,
+    TextFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
@@ -17,6 +21,7 @@ from pipecat.frames.frames import (
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.google.llm import (
     GoogleAssistantContextAggregator,
     GoogleContextAggregatorPair,
@@ -40,6 +45,7 @@ from services.stt import build_deepgram_flux_stt
 from services.tts import build_deepgram_tts
 
 UserCallback = Callable[[str], Awaitable[None]]
+LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
 
 
 class UserAggregator(GoogleUserContextAggregator):
@@ -54,15 +60,80 @@ class UserAggregator(GoogleUserContextAggregator):
 
 
 class AssistantAggregator(GoogleAssistantContextAggregator):
-    def __init__(self, *args, on_message: Optional[UserCallback] = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        on_message: Optional[UserCallback] = None,
+        on_partial: Optional[UserCallback] = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._on_message = on_message
+        self._on_partial = on_partial
 
-    async def push_aggregation(self):  # type: ignore[override]
-        text = getattr(self, "_aggregation", "")
-        await super().push_aggregation()
-        if self._on_message and text:
-            await self._on_message(text)
+    async def handle_aggregation(self, aggregation: str):  # type: ignore[override]
+        await super().handle_aggregation(aggregation)
+        clean_text = aggregation.strip()
+        if self._on_message and clean_text:
+            result = self._on_message(clean_text)
+            if inspect.isawaitable(result):
+                await result
+
+    async def _handle_text(self, frame: TextFrame):  # type: ignore[override]
+        await super()._handle_text(frame)
+        if not getattr(self, "_started", 0):
+            return
+        text = frame.text
+        if not text or not text.strip():
+            return
+        if self._on_partial:
+            result = self._on_partial(text)
+            if inspect.isawaitable(result):
+                await result
+        if isinstance(frame, LLMTextFrame):
+            await self.push_frame(LLMTextFrame(text=text))
+            if not LLM_TEXT_IS_TEXTFRAME:
+                await self.push_frame(TextFrame(text=text))
+
+
+class AssistantSpeechGate(FrameProcessor):
+    def __init__(self, release_delay: float = 0.2, **kwargs):
+        super().__init__(**kwargs)
+        self._release_delay = release_delay
+        self._muted = False
+        self._unmute_task: Optional[asyncio.Task[None]] = None
+
+    def start_speaking(self) -> None:
+        if self._unmute_task:
+            self._unmute_task.cancel()
+            self._unmute_task = None
+        self._muted = True
+
+    def stop_speaking(self) -> None:
+        if self._unmute_task:
+            self._unmute_task.cancel()
+        loop = self.get_event_loop()
+        self._unmute_task = loop.create_task(self._delayed_unmute())
+
+    async def _delayed_unmute(self) -> None:
+        try:
+            await asyncio.sleep(self._release_delay)
+        except asyncio.CancelledError:
+            return
+        self._muted = False
+        self._unmute_task = None
+
+    async def cleanup(self) -> None:
+        if self._unmute_task:
+            self._unmute_task.cancel()
+            self._unmute_task = None
+        await super().cleanup()
+
+    async def process_frame(self, frame, direction: FrameDirection):  # type: ignore[override]
+        await super().process_frame(frame, direction)
+        if direction == FrameDirection.DOWNSTREAM and self._muted and isinstance(frame, AudioRawFrame):
+            return
+        await self.push_frame(frame, direction)
 
 
 @dataclass
@@ -102,6 +173,7 @@ class VoicePipelineController:
         self._stt_service = None
         self._llm_service: Optional[GoogleLLMService] = None
         self._tts_service = None
+        self._speech_gate: Optional[AssistantSpeechGate] = None
         self._user_aggregator: Optional[UserAggregator] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
 
@@ -111,7 +183,10 @@ class VoicePipelineController:
             self._metrics.mark("turn_start")
 
     async def _on_assistant_message(self, text: str) -> None:
-        self._history.add("assistant", text)
+        self._history.add("assistant", text, replace_last=True)
+
+    async def _on_assistant_partial(self, text: str) -> None:
+        self._history.add_partial("assistant", text)
 
     def _build_pipeline(self, config: RuntimeConfig) -> Pipeline:
         keys = get_api_keys()
@@ -131,6 +206,7 @@ class VoicePipelineController:
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
+        self._speech_gate = AssistantSpeechGate()
 
         context_pair: GoogleContextAggregatorPair = create_google_context(
             self._llm_service, self._history.export()
@@ -147,16 +223,18 @@ class VoicePipelineController:
             base_assistant.context,
             params=getattr(base_assistant, "_params", LLMAssistantAggregatorParams()),
             on_message=self._on_assistant_message,
+            on_partial=self._on_assistant_partial,
         )
 
         processors = [
             self._transport.input(),
+            self._speech_gate,
             self._stt_service,
             self._user_aggregator,
             self._llm_service,
-            self._assistant_aggregator,
             ActionExtractorFilter(self._actions_path, self._event_logger),
             self._tts_service,
+            self._assistant_aggregator,
             self._transport.output(),
         ]
         return Pipeline(processors)
@@ -173,9 +251,20 @@ class VoicePipelineController:
                 metrics.mark("audio_in_last_packet")
             elif isinstance(frame, LLMTextFrame) and "llm_first_token" not in metrics.marks:
                 metrics.mark("llm_first_token")
+            elif (
+                isinstance(frame, TextFrame)
+                and not isinstance(frame, LLMTextFrame)
+                and "llm_first_token" not in metrics.marks
+            ):
+                metrics.mark("llm_first_token")
+            elif isinstance(frame, TTSStartedFrame):
+                if self._speech_gate:
+                    self._speech_gate.start_speaking()
             elif isinstance(frame, TTSAudioRawFrame) and "tts_first_audio" not in metrics.marks:
                 metrics.mark("tts_first_audio")
             elif isinstance(frame, TTSStoppedFrame):
+                if self._speech_gate:
+                    self._speech_gate.stop_speaking()
                 metrics.mark("turn_complete")
                 metrics.compute_turn_metrics()
                 metrics.reset()
@@ -297,7 +386,11 @@ async def run_voice_pipeline(session_name: Optional[str] = None) -> None:
     session_paths = new_session(config_manager.config, session_name=session_name)
     event_logger = EventLogger(session_paths.event_log)
     metrics = MetricsTracker(event_logger)
-    history = ConversationHistory(session_paths.transcript)
+    history = ConversationHistory(
+        session_paths.transcript,
+        clean_transcript_path=session_paths.llm_transcript,
+        context_path=session_paths.llm_context,
+    )
 
     controller = VoicePipelineController(
         config_manager,
