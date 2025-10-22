@@ -197,7 +197,7 @@ class VoicePipelineController:
             audio_in_enabled=True,
             audio_in_sample_rate=16000,
             audio_out_enabled=True,
-            audio_out_sample_rate=config.tts.sample_rate,
+            audio_out_sample_rate=config.audio.output_sample_rate or config.tts.sample_rate,
             input_device_index=config.audio.input_device_index,
             output_device_index=config.audio.output_device_index,
         )
