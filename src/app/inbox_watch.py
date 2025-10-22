@@ -39,7 +39,7 @@ class InboxWatcher:
         while not self._stop_event.is_set():
             with self._inbox_path.open("r", encoding="utf-8") as fh:
                 fh.seek(self._offset)
-                for line in fh:
+                for line in iter(fh.readline, ""):
                     self._offset = fh.tell()
                     line = line.strip()
                     if not line:

@@ -105,6 +105,8 @@ def detect_default_audio_device_indices() -> Tuple[Optional[int], Optional[int]]
 class AudioConfig:
     input_device_index: Optional[int] = None
     output_device_index: Optional[int] = None
+    output_sample_rate: Optional[int] = None
+    auto_select_devices: bool = True
 
 
 @dataclass
@@ -147,23 +149,39 @@ class RuntimeConfig:
 
 
 def load_or_initialize_runtime_config(path: Path = CONFIG_PATH) -> RuntimeConfig:
-    if path.exists():
-        data = json.loads(path.read_text())
-        return RuntimeConfig(
+    path_exists = path.exists()
+    data: Dict[str, Any] = {}
+
+    if path_exists:
+        maybe_data = json.loads(path.read_text())
+        if isinstance(maybe_data, dict):
+            data = maybe_data
+
+    if data:
+        config = RuntimeConfig(
             audio=AudioConfig(**data.get("audio", {})),
             stt=STTConfig(**data.get("stt", {})),
             llm=LLMConfig(**data.get("llm", {})),
             tts=TTSConfig(**data.get("tts", {})),
         )
+    else:
+        config = RuntimeConfig()
 
-    config = RuntimeConfig()
-    input_index, output_index = detect_default_audio_device_indices()
-    if input_index is not None:
-        config.audio.input_device_index = input_index
-    if output_index is not None:
-        config.audio.output_device_index = output_index
+    updated = False
 
-    path.write_text(json.dumps(config.as_dict(), indent=2))
+    if config.audio.auto_select_devices:
+        input_index, output_index = detect_default_audio_device_indices()
+
+        if input_index is not None and config.audio.input_device_index != input_index:
+            config.audio.input_device_index = input_index
+            updated = True
+        if output_index is not None and config.audio.output_device_index != output_index:
+            config.audio.output_device_index = output_index
+            updated = True
+
+    if not path_exists or not data or updated:
+        path.write_text(json.dumps(config.as_dict(), indent=2))
+
     return config
 
 

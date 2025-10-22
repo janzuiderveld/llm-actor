@@ -52,7 +52,7 @@ class ParamsWatcher:
         while not self._stop_event.is_set():
             with self._path.open("r", encoding="utf-8") as fh:
                 fh.seek(self._offset)
-                for line in fh:
+                for line in iter(fh.readline, ""):
                     self._offset = fh.tell()
                     line = line.strip()
                     if not line:
@@ -86,12 +86,15 @@ class ParamsWatcher:
             self._config.apply_updates(llm=updates)
             self._apply_callback({"llm": updates})
         elif op == "llm.system":
-            text = payload.get("text")
-            if isinstance(text, str):
-                self._config.apply_updates(llm={"system_prompt": text})
-                self._apply_callback({"llm": {"system_prompt": text}})
+            if "text" in payload:
+                text = payload.get("text")
+                if isinstance(text, str) or text is None:
+                    self._config.apply_updates(llm={"system_prompt": text})
+                    self._apply_callback({"llm": {"system_prompt": text}})
+                    self._history.set_system_message(text)
         elif op == "history.reset":
-            self._history.reset()
+            current_prompt = self._config.config.llm.system_prompt
+            self._history.reset(system_prompt=current_prompt)
         elif op == "history.append":
             role = payload.get("role")
             content = payload.get("content")

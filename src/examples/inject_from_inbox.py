@@ -15,9 +15,9 @@ def append_line(line: str) -> None:
 
 
 def main() -> None:
-    append_line("P: Hello from the inbox")
-    time.sleep(0.1)
     append_line("A: adding more context")
+    time.sleep(0.1)
+    append_line("P: Hello from the inbox")
 
 
 if __name__ == "__main__":

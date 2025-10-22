@@ -7,7 +7,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 from app.history import ConversationHistory
 
 
-def test_history_logs_clean_and_context(tmp_path):
+def test_history_logs_transcripts_without_context(tmp_path):
     case1 = tmp_path / "case1"
     case1.mkdir()
 
@@ -18,7 +18,6 @@ def test_history_logs_clean_and_context(tmp_path):
     history = ConversationHistory(
         transcript_path,
         clean_transcript_path=clean_path,
-        context_path=context_path,
     )
 
     history.add("user", "hello")
@@ -39,12 +38,7 @@ def test_history_logs_clean_and_context(tmp_path):
         {"role": "assistant", "content": "Hi there"},
     ]
 
-    context_lines = [json.loads(line) for line in context_path.read_text().splitlines()]
-    assert [entry["role"] for entry in context_lines[0]["context"]] == ["user"]
-    assert context_lines[1]["context"] == [
-        {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "Hi there"},
-    ]
+    assert not context_path.exists()
 
     # Replicate multi-chunk assistant response with action tag
     case2 = tmp_path / "case2"
@@ -57,7 +51,6 @@ def test_history_logs_clean_and_context(tmp_path):
     history2 = ConversationHistory(
         transcript_path2,
         clean_transcript_path=clean_path2,
-        context_path=context_path2,
     )
 
     history2.add("user", "Okay. Nice. Try it again. And now say a sentence while you also say the command.")
@@ -80,5 +73,60 @@ def test_history_logs_clean_and_context(tmp_path):
         },
     ]
 
-    context_lines2 = [json.loads(line) for line in context_path2.read_text().splitlines()]
-    assert context_lines2[-1]["context"][-1]["content"] == "Sure. I'm turning on the light for you. <turn_on_light>"
+    assert not context_path2.exists()
+
+
+def test_system_prompt_reflects_in_clean_transcript(tmp_path):
+    transcript_path = tmp_path / "transcript.jsonl"
+    clean_path = tmp_path / "transcript.llm.jsonl"
+    context_path = tmp_path / "LLM_context.jsonl"
+
+    history = ConversationHistory(
+        transcript_path,
+        clean_transcript_path=clean_path,
+    )
+
+    locked_prompt = "You guard the Velvet Room."
+    unlocked_prompt = "You are the Open Door."
+    reset_prompt = "System reset to neutral."
+
+    history.set_system_message(locked_prompt)
+    history.add("user", "hello")
+
+    clean_lines = [json.loads(line) for line in clean_path.read_text().splitlines()]
+    assert clean_lines[0] == {"role": "system", "content": locked_prompt}
+    assert clean_lines[1] == {"role": "user", "content": "hello"}
+
+    history.set_system_message(unlocked_prompt)
+    clean_lines = [json.loads(line) for line in clean_path.read_text().splitlines()]
+    assert clean_lines[0] == {"role": "system", "content": unlocked_prompt}
+
+    history.reset(system_prompt=reset_prompt)
+    clean_lines = [json.loads(line) for line in clean_path.read_text().splitlines()]
+    assert clean_lines == [{"role": "system", "content": reset_prompt}]
+
+    history.set_system_message(None)
+    assert clean_path.read_text() == ""
+    assert not context_path.exists()
+
+
+def test_assistant_replacement_dedupes_logged_content(tmp_path):
+    transcript_path = tmp_path / "transcript.jsonl"
+    history = ConversationHistory(transcript_path)
+
+    history.add_partial("assistant", "I am doing wonderfully, thank you for asking!")
+    repeated = (
+        "I am doing wonderfully, thank you for asking! It's always a pleasure to greet new friends. "
+        "I am doing wonderfully , thank you for asking! It's always a pleasure to greet new friends . "
+        "How may I help you today?"
+    )
+    expected = (
+        "I am doing wonderfully, thank you for asking! It's always a pleasure to greet new friends. "
+        "How may I help you today?"
+    )
+
+    history.add("assistant", repeated, replace_last=True)
+
+    transcript_lines = [json.loads(line) for line in transcript_path.read_text().splitlines()]
+    assert transcript_lines[-1]["replace"] is True
+    assert transcript_lines[-1]["content"] == expected

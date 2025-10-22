@@ -40,7 +40,6 @@ async def test_pipeline_construction_smoke():
     history = ConversationHistory(
         session_paths.transcript,
         clean_transcript_path=session_paths.llm_transcript,
-        context_path=session_paths.llm_context,
     )
 
     controller = VoicePipelineController(

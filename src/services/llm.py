@@ -23,7 +23,9 @@ def build_google_llm(config: RuntimeConfig, api_key: str) -> GoogleLLMService:
 
 
 def create_google_context(llm_service: GoogleLLMService, history_messages: list[dict]) -> GoogleContextAggregatorPair:
-    context = GoogleLLMContext(messages=history_messages)
+    context = GoogleLLMContext()
+    if history_messages:
+        context.set_messages(history_messages)
     system_instruction = getattr(llm_service, "_system_instruction", None)
     if system_instruction:
         context.system_message = system_instruction  # type: ignore[attr-defined]

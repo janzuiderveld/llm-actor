@@ -1,8 +1,0 @@
-action:show_options
-action:example_action
-send _transcription_to_llm
-send _transcription_to_llm
-/speak
-turn_on_light
-/call:disambiguate_model
-END_OF_CONVERSATION

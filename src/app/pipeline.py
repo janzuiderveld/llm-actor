@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import inspect
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from pipecat.frames.frames import (
     AudioRawFrame,
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
     LLMTextFrame,
     TTSAudioRawFrame,
     TTSStartedFrame,
@@ -33,7 +36,7 @@ from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransp
 
 from app.config import ConfigManager, RuntimeConfig, get_api_keys
 from app.devices import ensure_devices_selected
-from app.filters import ActionExtractorFilter
+from app.filters import ActionExtractorFilter, STTStandaloneIFilter
 from app.history import ConversationHistory
 from app.inbox_watch import InboxWatcher
 from app.logging_io import EventLogger
@@ -49,11 +52,20 @@ LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
 
 
 class UserAggregator(GoogleUserContextAggregator):
-    def __init__(self, *args, on_message: Optional[UserCallback] = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        on_message: Optional[UserCallback] = None,
+        transform: Optional[Callable[[str], str]] = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._on_message = on_message
+        self._transform = transform
 
     async def handle_aggregation(self, aggregation: str):  # type: ignore[override]
+        if self._transform:
+            aggregation = self._transform(aggregation)
         await super().handle_aggregation(aggregation)
         if self._on_message and aggregation:
             await self._on_message(aggregation)
@@ -94,6 +106,14 @@ class AssistantAggregator(GoogleAssistantContextAggregator):
             await self.push_frame(LLMTextFrame(text=text))
             if not LLM_TEXT_IS_TEXTFRAME:
                 await self.push_frame(TextFrame(text=text))
+
+    async def _handle_llm_start(self, frame: LLMFullResponseStartFrame):  # type: ignore[override]
+        await super()._handle_llm_start(frame)
+        await self.push_frame(frame)
+
+    async def _handle_llm_end(self, frame: LLMFullResponseEndFrame):  # type: ignore[override]
+        await super()._handle_llm_end(frame)
+        await self.push_frame(frame)
 
 
 class AssistantSpeechGate(FrameProcessor):
@@ -168,6 +188,7 @@ class VoicePipelineController:
         self._params_path = params_path
         self._loop = asyncio.get_event_loop()
         self._inbox_buffer: list[str] = []
+        self._inbox_buffer_lock = threading.Lock()
         self._components: Optional[PipelineComponents] = None
         self._transport: Optional[LocalAudioTransport] = None
         self._stt_service = None
@@ -178,6 +199,8 @@ class VoicePipelineController:
         self._assistant_aggregator: Optional[AssistantAggregator] = None
 
     async def _on_user_message(self, text: str) -> None:
+        if self._components:
+            self._components.params_watcher.drain_pending()
         self._history.add("user", text)
         if "turn_start" not in self._metrics.marks:
             self._metrics.mark("turn_start")
@@ -218,6 +241,7 @@ class VoicePipelineController:
             base_user.context,
             params=getattr(base_user, "_params", LLMUserAggregatorParams()),
             on_message=self._on_user_message,
+            transform=self._consume_inbox_buffer,
         )
         self._assistant_aggregator = AssistantAggregator(
             base_assistant.context,
@@ -230,11 +254,12 @@ class VoicePipelineController:
             self._transport.input(),
             self._speech_gate,
             self._stt_service,
+            STTStandaloneIFilter(event_logger=self._event_logger),
             self._user_aggregator,
             self._llm_service,
+            self._assistant_aggregator,
             ActionExtractorFilter(self._actions_path, self._event_logger),
             self._tts_service,
-            self._assistant_aggregator,
             self._transport.output(),
         ]
         return Pipeline(processors)
@@ -279,18 +304,30 @@ class VoicePipelineController:
         async def _on_finished(task_obj, frame):  # type: ignore[unused-ignore]
             event_logger.emit("pipeline_finished", {"timestamp": time.time()})
 
+    def _consume_inbox_buffer(self, text: str) -> str:
+        with self._inbox_buffer_lock:
+            if not self._inbox_buffer:
+                return text
+            extras = "\n".join(self._inbox_buffer)
+            self._inbox_buffer.clear()
+        if text:
+            return f"{text}\n{extras}"
+        return extras
+
     def _inbox_callback(self, mode: str, payload: str) -> None:
-        if mode == "append" and not self._inbox_buffer:
-            mode = "push"
         if mode == "append":
-            self._inbox_buffer.append(payload)
+            with self._inbox_buffer_lock:
+                self._inbox_buffer.append(payload)
             return
         if mode == "push":
-            if self._inbox_buffer:
-                payload = "\n".join(self._inbox_buffer + [payload])
-                self._inbox_buffer = []
-            future = asyncio.run_coroutine_threadsafe(self._inject_user_text(payload), self._loop)
+            text = self._consume_inbox_buffer(payload)
+            future = asyncio.run_coroutine_threadsafe(self._handle_inbox_push(text), self._loop)
             future.add_done_callback(lambda fut: fut.exception())
+
+    async def _handle_inbox_push(self, text: str) -> None:
+        await self._interrupt_assistant_if_needed()
+        if text:
+            await self._inject_user_turn(text)
 
     async def _inject_user_text(self, text: str) -> None:
         if not self._components:
@@ -298,6 +335,27 @@ class VoicePipelineController:
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         frame = TranscriptionFrame(text=text, user_id="inbox", timestamp=timestamp)
         await self._components.task.queue_frame(frame)
+
+    async def _inject_user_turn(self, text: str) -> None:
+        if not self._components:
+            return
+        await self._components.task.queue_frame(UserStartedSpeakingFrame(emulated=True))
+        await self._inject_user_text(text)
+        await self._components.task.queue_frame(UserStoppedSpeakingFrame(emulated=True))
+
+    async def _interrupt_assistant_if_needed(self) -> None:
+        if not self._assistant_aggregator:
+            return
+        started = getattr(self._assistant_aggregator, "_FrameProcessor__started", False)
+        if not started:
+            return
+        try:
+            await self._assistant_aggregator.push_interruption_task_frame_and_wait()
+            if self._event_logger:
+                self._event_logger.emit("inbox_interrupt", {"source": "inbox"})
+        except Exception as exc:  # pragma: no cover - defensive
+            if self._event_logger:
+                self._event_logger.emit("inbox_interrupt_error", {"error": repr(exc)})
 
     def _apply_param_updates(self, updates: dict) -> None:
         if not updates:
@@ -313,8 +371,18 @@ class VoicePipelineController:
                     params["temperature"] = llm_updates["temperature"]
                 if "max_tokens" in llm_updates:
                     params["max_tokens"] = llm_updates["max_tokens"]
-            if "system_prompt" in llm_updates:
-                setattr(self._llm_service, "_system_instruction", llm_updates["system_prompt"])
+            new_prompt = llm_updates.get("system_prompt")
+            if new_prompt is not None:
+                setattr(self._llm_service, "_system_instruction", new_prompt)
+                if self._assistant_aggregator:
+                    context = getattr(self._assistant_aggregator, "context", None)
+                    if context is not None and hasattr(context, "system_message"):
+                        context.system_message = new_prompt
+                if self._user_aggregator:
+                    context = getattr(self._user_aggregator, "context", None)
+                    if context is not None and hasattr(context, "system_message"):
+                        context.system_message = new_prompt
+                self._history.set_system_message(new_prompt)
         if "stt" in updates and self._stt_service:
             stt_updates = updates["stt"]
             params = getattr(self._stt_service, "_params", None)
@@ -342,7 +410,7 @@ class VoicePipelineController:
         pipeline = self._build_pipeline(config)
 
         params = PipelineParams(
-            allow_interruptions=False,
+            allow_interruptions=True,
             audio_in_sample_rate=16000,
             audio_out_sample_rate=config.tts.sample_rate,
             enable_metrics=True,
@@ -359,9 +427,6 @@ class VoicePipelineController:
             apply_callback=self._apply_param_updates,
             event_logger=self._event_logger,
         )
-        inbox_watcher.start()
-        params_watcher.start()
-
         self._components = PipelineComponents(
             pipeline=pipeline,
             task=task,
@@ -369,6 +434,11 @@ class VoicePipelineController:
             inbox_watcher=inbox_watcher,
             params_watcher=params_watcher,
         )
+
+        self._components.inbox_watcher.start()
+        self._components.params_watcher.start()
+        await asyncio.sleep(0)
+        self._components.params_watcher.drain_pending()
 
         await runner.run(task)
 
@@ -389,8 +459,8 @@ async def run_voice_pipeline(session_name: Optional[str] = None) -> None:
     history = ConversationHistory(
         session_paths.transcript,
         clean_transcript_path=session_paths.llm_transcript,
-        context_path=session_paths.llm_context,
     )
+    history.set_system_message(config_manager.config.llm.system_prompt)
 
     controller = VoicePipelineController(
         config_manager,

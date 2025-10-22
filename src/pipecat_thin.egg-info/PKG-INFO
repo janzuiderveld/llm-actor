@@ -72,7 +72,7 @@ This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai
 * `runtime/actions.txt`: assistant `<...>` directives are appended here (one per line). Use an external watcher to execute them.
 * `runtime/inbox.txt`: external systems append lines to inject user input.
   * `P: <text>` starts a new user turn immediately.
-  * `A: <text>` appends to the pending user message before it is sent to the LLM; if no pending message exists the text is treated as `P:`.
+  * `A: <text>` buffers additional text that will be appended to the next user turn (multiple `A:` lines join with newlines).
 * `runtime/params_inbox.ndjson`: NDJSON entries processed **between turns** to adjust runtime parameters. Supported operations:
   * `{"op":"llm.set","model":"gemini-2.5-flash","temperature":0.6,"max_tokens":1024}`
   * `{"op":"llm.system","text":"You are a concise assistant."}`
