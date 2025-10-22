@@ -1,0 +1,9 @@
+pipecat-ai[deepgram,google,local]
+python-dotenv
+pydantic
+sounddevice>=0.4
+typer>=0.9
+watchfiles
+
+[test]
+pytest

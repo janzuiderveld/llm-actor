@@ -16,11 +16,11 @@ src/app/prompts.py
 src/app/session.py
 src/examples/inject_from_inbox.py
 src/examples/minimal_run.py
-src/pipecat_thin.egg-info/PKG-INFO
-src/pipecat_thin.egg-info/SOURCES.txt
-src/pipecat_thin.egg-info/dependency_links.txt
-src/pipecat_thin.egg-info/requires.txt
-src/pipecat_thin.egg-info/top_level.txt
+src/llm_actor.egg-info/PKG-INFO
+src/llm_actor.egg-info/SOURCES.txt
+src/llm_actor.egg-info/dependency_links.txt
+src/llm_actor.egg-info/requires.txt
+src/llm_actor.egg-info/top_level.txt
 src/projects/__init__.py
 src/projects/utils.py
 src/services/__init__.py

@@ -1,3 +1,5 @@
+"""Small helper that simulates new visitors by writing to the shared inbox."""
+
 from __future__ import annotations
 
 from projects.utils import append_inbox_line
@@ -8,7 +10,9 @@ def main() -> None:
     counter = 1
     try:
         while True:
+            # Blocking input keeps the loop simple: we wait until you press Enter.
             input(f"[Visitor {counter}] > ")
+            # Each visitor announcement is written using the shared helper.
             append_inbox_line("P: [A new visitor steps before you.]")
             counter += 1
     except KeyboardInterrupt:

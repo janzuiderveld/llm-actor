@@ -3,10 +3,10 @@ requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pipecat-thin"
+name = "llm-actor"
 version = "0.1.0"
 description = "Thin Pipecat wrapper for Deepgram Flux → Gemini → Deepgram Aura voice pipeline"
-authors = [{name = "Pipecat Thin"}]
+authors = [{name = "Jan Zuiderveld"}]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

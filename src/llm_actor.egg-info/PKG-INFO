@@ -1,5 +1,5 @@
-Metadata-Version: 2.1
-Name: pipecat-thin
+Metadata-Version: 2.4
+Name: llm-actor
 Version: 0.1.0
 Summary: Thin Pipecat wrapper for Deepgram Flux → Gemini → Deepgram Aura voice pipeline
 Author: Pipecat Thin
@@ -45,10 +45,12 @@ Follow these steps to run the door project end-to-end:
    ```bash
    git clone https://github.com/janzuiderveld/llm-actor>
    cd llm_actor
-   python -m venv .venv
+   python -m venv .venv # make sure to use python3.10+ (use python -V to check)
    source .venv/bin/activate
-   python -m pip install --upgrade pip
+   python -m pip install --upgrade pip 
    pip install -e .
+   # If you skip the editable install, install the dependencies manually:
+   # python -m pip install python-dotenv typer watchfiles
    ```
 
    Reactivate the virtual environment with `source .venv/bin/activate` whenever you open a new terminal for this project.

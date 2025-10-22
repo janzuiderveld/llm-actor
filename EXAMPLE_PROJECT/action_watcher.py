@@ -1,3 +1,5 @@
+"""Watch the shared action log and update the door's persona when it changes."""
+
 from __future__ import annotations
 
 import os
@@ -10,6 +12,7 @@ from projects.utils import ACTIONS_FILE, INBOX_FILE, append_inbox_line, ensure_r
 from .boot import LOCKED_PROMPT as DEFAULT_LOCKED_PROMPT, UNLOCKED_PROMPT as DEFAULT_UNLOCKED_PROMPT
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+# Simple audio cues so we can hear when the door locks or unlocks.
 OPEN_SOUND = ASSETS_DIR / "opening-door-411632.mp3"
 CLOSE_SOUND = ASSETS_DIR / "close-door-382723.mp3"
 
@@ -39,14 +42,17 @@ def play_sound(sound_path: Path) -> None:
 
 
 def main() -> None:
+    # Ensure the shared files exist before we try to read from them.
     ensure_runtime_files()
     print("Starting action watcher...")
     with ACTIONS_FILE.open("r", encoding="utf-8") as actions, INBOX_FILE.open(
         "r", encoding="utf-8"
     ) as inbox:
+        # Jump to the end so we only process new lines that arrive after startup.
         actions.seek(0, os.SEEK_END)
         inbox.seek(0, os.SEEK_END)
 
+        # Track whether the door is currently locked so we know which persona to use.
         locked = True
         locked_prompt = (
             os.getenv("EXAMPLE_PROJECT_LOCKED_PROMPT")
@@ -63,11 +69,13 @@ def main() -> None:
 
         try:
             while True:
+                # Grab the newest action written by the main app, if any.
                 action_line = tail_line(actions)
                 if action_line:
                     if action_line == "UNLOCK":
                         print("UNLOCK found")
                         locked = False
+                        # Swap the assistant's persona and tell listeners what happened.
                         set_system_prompt(unlocked_prompt)
                         append_inbox_line("A: [The door unlocked, the personality of the door changed drastically, see current system message]")
                         play_sound(OPEN_SOUND)
@@ -75,6 +83,7 @@ def main() -> None:
                     if action_line == "LOCK":
                         print("LOCK found")
                         locked = True
+                        # Restore the locked persona and log the change for the user.
                         set_system_prompt(locked_prompt)
                         append_inbox_line("A: [The door locked, the personality of the door changed drastically, see current system message]")
                         play_sound(CLOSE_SOUND)
