@@ -27,11 +27,11 @@ Follow these steps to run the door project end-to-end:
 1. **Set up the environment**
 
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/janzuiderveld/llm-actor>
    cd llm_actor
-   python -m venv .venv
+   python -m venv .venv # make sure to use python3.10+ (use python -V to check)
    source .venv/bin/activate
-   python -m pip install --upgrade pip
+   python -m pip install --upgrade pip 
    pip install -e .
    ```
 
