@@ -71,10 +71,10 @@ When the project is running, a terminal window running `inbox_writer.py` prompts
 
 **`runtime/inbox.txt`**
 - `P: <text>` — push a full user turn immediately.
-- `A: <text>` — buffer supplemental text; multiple lines are joined with newlines and prepended to the next `P:` entry.
+- `A: <text>` — buffer supplemental text; multiple lines are joined with newlines and appended to the next user entry.
 
 **`runtime/actions.txt`**
-- Append-only log emitted by the agent (everything between <...> is added to this file. for example `<UNLOCK>` / `<LOCK>`). External services should tail this file and react to directives as they appear.
+- Append-only log emitted by the agent (everything between <...> is added to this file. for example `<LOCK>` > `LOCK\n`). External services should tail this file and react to directives as they appear.
 
 **`runtime/params_inbox.ndjson`**
 - Processed between turns to adjust runtime behavior. Append any of the following operations one JSON object per line:
@@ -118,7 +118,7 @@ If credentials are missing the tests skip with a clear message.
 
 * **Audio devices missing**: Ensure PortAudio is installed (see prerequisites) and run `python -m sounddevice` inside your virtualenv to confirm the runtime can enumerate devices.
 * **429 / rate limits**: The tests and pipeline perform real API calls; adjust usage or upgrade account tiers if needed.
-* **High latency**: Tune Flux EOT thresholds or Gemini temperature via `runtime/params_inbox.ndjson` to improve responsiveness.
+* **High latency**: Tune Flux EOT thresholds via `runtime/params_inbox.ndjson` to improve responsiveness.
 
 ## License
 
