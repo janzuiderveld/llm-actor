@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
-from .config import ConfigManager
+from .config import ConfigManager, detect_default_audio_device_indices
 
 
 @dataclass
@@ -68,29 +67,26 @@ def list_devices() -> List[DeviceInfo]:
     return devices
 
 
-def _prompt_user_choice(devices: Iterable[DeviceInfo], kind: str) -> Optional[int]:
-    print(f"Available {kind} devices:")
-    for device in devices:
-        print(json.dumps(device.as_dict()))
-    while True:
-        raw = input(f"Select {kind} device index (or leave blank to skip): ")
-        if not raw:
-            return None
-        try:
-            idx = int(raw)
-        except ValueError:
-            print("Please enter a valid integer index.")
-            continue
-        return idx
-
-
 def ensure_devices_selected(config_manager: ConfigManager) -> None:
     cfg = config_manager.config
     if cfg.audio.input_device_index is not None and cfg.audio.output_device_index is not None:
         return
 
-    devices = list_devices()
-    if not devices:
+    input_index, output_index = detect_default_audio_device_indices()
+
+    updates: dict[str, int] = {}
+    if cfg.audio.input_device_index is None and input_index is not None:
+        updates["input_device_index"] = input_index
+    if cfg.audio.output_device_index is None and output_index is not None:
+        updates["output_device_index"] = output_index
+
+    if updates:
+        config_manager.apply_updates(audio=updates)
+
+    if (
+        config_manager.config.audio.input_device_index is None
+        or config_manager.config.audio.output_device_index is None
+    ):
         try:
             import sounddevice  # type: ignore  # noqa: F401
         except ImportError:
@@ -101,19 +97,7 @@ def ensure_devices_selected(config_manager: ConfigManager) -> None:
         else:
             hint = "Verify PortAudio can enumerate devices via `python -m sounddevice`."
         raise RuntimeError(
-            "No audio devices detected. Install PortAudio or run on a system with audio hardware. "
+            "Unable to detect system default audio devices automatically. "
+            "Set `audio.input_device_index` and `audio.output_device_index` manually in runtime/config.json. "
             f"{hint}"
         )
-
-    input_index = cfg.audio.input_device_index
-    output_index = cfg.audio.output_device_index
-
-    if input_index is None:
-        input_index = _prompt_user_choice(devices, "input")
-    if output_index is None:
-        output_index = _prompt_user_choice(devices, "output")
-
-    if input_index is None or output_index is None:
-        raise RuntimeError("Input/output device selection is required for the voice pipeline.")
-
-    config_manager.set_audio_devices(input_index, output_index)

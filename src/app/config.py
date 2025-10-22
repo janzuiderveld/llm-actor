@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from dotenv import load_dotenv
 
@@ -19,6 +19,86 @@ def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     if value is None:
         return default
     return value
+
+
+def _normalize_device_index(value: Any) -> Optional[int]:
+    try:
+        if isinstance(value, int) and value >= 0:
+            return value
+        if value is not None:
+            candidate = int(value)
+            if candidate >= 0:
+                return candidate
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+def detect_default_audio_device_indices() -> Tuple[Optional[int], Optional[int]]:
+    """Return preferred input/output device indices, preferring Krisp when available."""
+    try:
+        import sounddevice as sd  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency
+        return None, None
+
+    try:
+        devices = sd.query_devices()
+    except Exception:  # pragma: no cover - runtime environment dependent
+        return None, None
+
+    def has_channels(info: Dict[str, Any], key: str) -> bool:
+        try:
+            return int(info.get(key, 0)) > 0
+        except Exception:
+            return False
+
+    def find_device(predicate) -> Optional[int]:
+        for idx, info in enumerate(devices):
+            if not isinstance(info, dict):
+                continue
+            if predicate(idx, info):
+                return idx
+        return None
+
+    krisp_input = find_device(
+        lambda _idx, info: "krisp" in str(info.get("name", "")).lower() and has_channels(info, "max_input_channels")
+    )
+    krisp_output = find_device(
+        lambda _idx, info: "krisp" in str(info.get("name", "")).lower() and has_channels(info, "max_output_channels")
+    )
+
+    default_input = None
+    default_output = None
+
+    hostapi_index = getattr(getattr(sd, "default", object()), "hostapi", None)
+    if isinstance(hostapi_index, int) and hostapi_index >= 0:
+        try:
+            hostapi = sd.query_hostapis(hostapi_index)
+        except Exception:  # pragma: no cover - runtime environment dependent
+            hostapi = None
+        if isinstance(hostapi, dict):
+            default_input = _normalize_device_index(hostapi.get("default_input_device"))
+            default_output = _normalize_device_index(hostapi.get("default_output_device"))
+
+    try:
+        sd_defaults = sd.default.device  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - runtime environment dependent
+        sd_defaults = None
+    if isinstance(sd_defaults, (list, tuple)):
+        if default_input is None and len(sd_defaults) > 0:
+            default_input = _normalize_device_index(sd_defaults[0])
+        if default_output is None and len(sd_defaults) > 1:
+            default_output = _normalize_device_index(sd_defaults[1])
+
+    fallback_input = find_device(lambda _idx, info: has_channels(info, "max_input_channels"))
+    fallback_output = find_device(lambda _idx, info: has_channels(info, "max_output_channels"))
+
+    input_index = krisp_input if krisp_input is not None else default_input if default_input is not None else fallback_input
+    output_index = (
+        krisp_output if krisp_output is not None else default_output if default_output is not None else fallback_output
+    )
+
+    return input_index, output_index
 
 
 @dataclass
@@ -66,6 +146,27 @@ class RuntimeConfig:
         return asdict(self)
 
 
+def load_or_initialize_runtime_config(path: Path = CONFIG_PATH) -> RuntimeConfig:
+    if path.exists():
+        data = json.loads(path.read_text())
+        return RuntimeConfig(
+            audio=AudioConfig(**data.get("audio", {})),
+            stt=STTConfig(**data.get("stt", {})),
+            llm=LLMConfig(**data.get("llm", {})),
+            tts=TTSConfig(**data.get("tts", {})),
+        )
+
+    config = RuntimeConfig()
+    input_index, output_index = detect_default_audio_device_indices()
+    if input_index is not None:
+        config.audio.input_device_index = input_index
+    if output_index is not None:
+        config.audio.output_device_index = output_index
+
+    path.write_text(json.dumps(config.as_dict(), indent=2))
+    return config
+
+
 class ConfigManager:
     """Handles persisted runtime configuration as JSON."""
 
@@ -74,19 +175,15 @@ class ConfigManager:
         self._config = self._load()
 
     def _load(self) -> RuntimeConfig:
-        if self._path.exists():
-            data = json.loads(self._path.read_text())
-            return RuntimeConfig(
-                audio=AudioConfig(**data.get("audio", {})),
-                stt=STTConfig(**data.get("stt", {})),
-                llm=LLMConfig(**data.get("llm", {})),
-                tts=TTSConfig(**data.get("tts", {})),
-            )
-        return RuntimeConfig()
+        return load_or_initialize_runtime_config(self._path)
 
     @property
     def config(self) -> RuntimeConfig:
         return self._config
+
+    @property
+    def path(self) -> Path:
+        return self._path
 
     def save(self) -> None:
         self._path.write_text(json.dumps(self._config.as_dict(), indent=2))
