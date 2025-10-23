@@ -93,7 +93,7 @@ When the project is running, a terminal window running `inbox_writer.py` prompts
 ## Acoustic Echo Cancellation
 
 - Install [Krisp](https://krisp.ai/download/) for system-level acoustic echo cancellation. This makes sure persona output does not leak into the microphone input.
-- Set **Krisp Microphone** and **Krisp Speaker** as your input/output devices or use the auto flag in the audio config.
+- Set **Krisp Microphone** and **Krisp Speaker** as your input/output devices in `boot.py` or use the auto flag in the audio config.
 NOTE: It is possible that sound output is crackling when using Krisp. If this happens, for now continue with headphones. Will do a universal fix in future update.
 
 ## Testing
