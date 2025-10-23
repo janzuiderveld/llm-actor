@@ -16,7 +16,7 @@ This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai
 * System audio devices accessible to PortAudio (used by Pipecat's local audio transport).
   * macOS: `brew install portaudio`
   * Ubuntu/Debian: `sudo apt install portaudio19-dev`
-  * Windows: the bundled `sounddevice` wheel ships PortAudio automatically.
+  * Windows: the bundled `sounddevice` wheel ships PortAudio automatically. However, Windows users need to install [ffmpeg](https://phoenixnap.com/kb/ffmpeg-windows) for audio playback.
 
 ## Quickstart
 
