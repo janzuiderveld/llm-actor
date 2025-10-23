@@ -41,8 +41,14 @@ Follow these steps to run the door project end-to-end:
 
 2. **Add credentials and defaults**
 
+   (Mac)
    ```bash
    cp .env.example .env
+   ```
+   
+   (Windows)
+   ```bash
+   copy .env.example .env
    ```
 
    Open `.env` in your editor and fill in `GOOGLE_API_KEY`, `DEEPGRAM_API_KEY`, and any optional defaults (LLM, STT, voice) you want to preload. Save the file before continuing.
