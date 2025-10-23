@@ -28,7 +28,7 @@ Follow these steps to run the door project end-to-end:
 
    ```bash
    git clone https://github.com/janzuiderveld/llm-actor
-   cd llm_actor
+   cd llm-actor
    python -m venv .venv # make sure to use python3.10+ (use python -V to check)
    # if you get "command not found: python" type python3 instead of python
    source .venv/bin/activate # for Mac or Linux
