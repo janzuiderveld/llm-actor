@@ -11,8 +11,8 @@ This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai
 
 ## Prerequisites
 
-* Python 3.10 or newer (3.11 recommended as it's the version that this is tested on).
-* Deepgram and Google API credentials with access to Flux STT, Aura-2 TTS, and Gemini 2.5 Flash.
+* [Python 3.10](https://www.python.org/downloads/) or newer (3.11 recommended as it's the version that this is tested on).
+* [Deepgram](https://developers.deepgram.com/reference/deepgram-api-overview) and [Google API](https://ai.google.dev/gemini-api/docs/api-key) credentials with access to Flux STT, Aura-2 TTS, and Gemini 2.5 Flash.
 * System audio devices accessible to PortAudio (used by Pipecat's local audio transport).
   * macOS: `brew install portaudio`
   * Ubuntu/Debian: `sudo apt install portaudio19-dev`
@@ -30,13 +30,14 @@ Follow these steps to run the door project end-to-end:
    git clone https://github.com/janzuiderveld/llm-actor
    cd llm_actor
    python -m venv .venv # make sure to use python3.10+ (use python -V to check)
+   # if you get "command not found: python" type python3 instead of python
    source .venv/bin/activate # for Mac or Linux
-   # venv\Scripts\activate # for Windows
+   # .venv\Scripts\activate # for Windows
    python -m pip install --upgrade pip 
    pip install -e .
    ```
 
-   Reactivate the virtual environment with `source .venv/bin/activate` whenever you open a new terminal for this project.
+   Reactivate the virtual environment with `source .venv/bin/activate` (Mac/Linux) or `.venv\Scripts\activate` (Windows) whenever you open a new terminal for this project.
 
 2. **Add credentials and defaults**
 
