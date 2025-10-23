@@ -16,7 +16,7 @@ This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai
 * System audio devices accessible to PortAudio (used by Pipecat's local audio transport).
   * macOS: `brew install portaudio`
   * Ubuntu/Debian: `sudo apt install portaudio19-dev`
-  * Windows: the bundled `sounddevice` wheel ships PortAudio automatically.
+  * Windows: the bundled `sounddevice` wheel ships PortAudio automatically. However, Windows users need to install [ffmpeg](https://phoenixnap.com/kb/ffmpeg-windows) for audio playback.
 
 ## Quickstart
 
@@ -41,8 +41,14 @@ Follow these steps to run the door project end-to-end:
 
 2. **Add credentials and defaults**
 
+   (Mac)
    ```bash
    cp .env.example .env
+   ```
+   
+   (Windows)
+   ```bash
+   copy .env.example .env
    ```
 
    Open `.env` in your editor and fill in `GOOGLE_API_KEY`, `DEEPGRAM_API_KEY`, and any optional defaults (LLM, STT, voice) you want to preload. Save the file before continuing.
@@ -93,7 +99,7 @@ When the project is running, a terminal window running `inbox_writer.py` prompts
 ## Acoustic Echo Cancellation
 
 - Install [Krisp](https://krisp.ai/download/) for system-level acoustic echo cancellation. This makes sure persona output does not leak into the microphone input.
-- Set **Krisp Microphone** and **Krisp Speaker** as your input/output devices or use the auto flag in the audio config.
+- Set **Krisp Microphone** and **Krisp Speaker** as your input/output devices in `boot.py` or use the auto flag in the audio config.
 NOTE: It is possible that sound output is crackling when using Krisp. If this happens, for now continue with headphones. Will do a universal fix in future update.
 
 ## Testing
