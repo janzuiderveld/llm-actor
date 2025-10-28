@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from pyaec import Aec
+
 from pipecat.frames.frames import (
     AudioRawFrame,
     LLMFullResponseEndFrame,
@@ -155,6 +157,34 @@ class AssistantSpeechGate(FrameProcessor):
             return
         await self.push_frame(frame, direction)
 
+class PyAECProcessor(FrameProcessor):
+    def __init__(self, frame_size: int = 160, filter_length_secs: float = 0.4, sample_rate: int = 16000, **kwargs):
+        super().__init__(**kwargs)
+        filter_length = int(sample_rate * filter_length_secs) # 0.4s
+        self._aec = Aec(frame_size, filter_length, sample_rate, True)
+
+    async def process_frame(self, frame, direction: FrameDirection):  # type: ignore[override]
+        await super().process_frame(frame, direction)
+
+        # playback reference frames: typically TTS audio frames
+        if isinstance(frame, TTSAudioRawFrame):
+            # try:
+            self._tts_frame_audio = frame.audio
+            # except Exception:
+            #     pass
+            await self.push_frame(frame, direction)
+            return
+
+        # microphone/raw audio frames: run AEC and replace data
+        if isinstance(frame, AudioRawFrame):
+            try:
+                cleaned = self._aec.cancel_echo(frame.audio, self._tts_frame_audio)
+                frame.audio = cleaned
+            except Exception:
+                pass
+
+        await self.push_frame(frame, direction)
+
 
 @dataclass
 class PipelineComponents:
@@ -194,6 +224,7 @@ class VoicePipelineController:
         self._stt_service = None
         self._llm_service: Optional[GoogleLLMService] = None
         self._tts_service = None
+        self._aec_proc: Optional[PyAECProcessor] = None
         self._speech_gate: Optional[AssistantSpeechGate] = None
         self._user_aggregator: Optional[UserAggregator] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
@@ -229,6 +260,7 @@ class VoicePipelineController:
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
+        self._aec_proc = PyAECProcessor()
         self._speech_gate = AssistantSpeechGate()
 
         context_pair: GoogleContextAggregatorPair = create_google_context(
@@ -252,6 +284,7 @@ class VoicePipelineController:
 
         processors = [
             self._transport.input(),
+            self._aec_proc,
             self._speech_gate,
             self._stt_service,
             STTStandaloneIFilter(event_logger=self._event_logger),

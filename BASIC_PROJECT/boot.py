@@ -68,10 +68,10 @@ def main() -> None:
     # Start the CLI plus helper scripts; the terminals make their logs easy to follow.
     processes = [
         launch_module("app.cli"),
-        launch_module_in_terminal(
-            "BASIC_PROJECT.inbox_writer",
-            title="Inbox Writer",
-        ),
+        # launch_module_in_terminal(
+        #     "BASIC_PROJECT.inbox_writer",
+        #     title="Inbox Writer",
+        # ),
     ]
 
     try:
