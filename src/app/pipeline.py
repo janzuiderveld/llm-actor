@@ -50,10 +50,6 @@ from services.tts import build_deepgram_tts
 UserCallback = Callable[[str], Awaitable[None]]
 LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
 
-from projects.audio_aec import EchoCanceller
-from projects.aec_proceessor_wrapper import AECProcessorWrapper
-from collections import deque
-
 class UserAggregator(GoogleUserContextAggregator):
     def __init__(
         self,
@@ -200,10 +196,6 @@ class VoicePipelineController:
         self._speech_gate: Optional[AssistantSpeechGate] = None
         self._user_aggregator: Optional[UserAggregator] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
-        
-        # Echo canceller
-        self._aec = EchoCanceller(frame_length=160, filter_length=2000)
-        self._playback_buffer = deque(maxlen=2000)
 
     async def _on_user_message(self, text: str) -> None:
         if self._components:
@@ -223,7 +215,6 @@ class VoicePipelineController:
         if not keys["deepgram"] or not keys["google"]:
             raise RuntimeError("GOOGLE_API_KEY and DEEPGRAM_API_KEY must be set.")
 
-        # --- Step 1: Setup local audio transport --
         transport_params = LocalAudioTransportParams(
             audio_in_enabled=True,
             audio_in_sample_rate=16000,
@@ -234,7 +225,6 @@ class VoicePipelineController:
         )
         self._transport = LocalAudioTransport(transport_params)
         
-        # --- Step 2: Initialize services (keep your original code) ---
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
@@ -259,15 +249,8 @@ class VoicePipelineController:
             on_partial=self._on_assistant_partial,
         )
 
-        # --- Step 3: Wrap output to store frames for AEC ---
-        async def wrapped_output_processor():
-            async for out_frame in self._transport.output():
-                self._playback_buffer.append(out_frame.copy())
-                yield out_frame
-              
-        # --- Step 4: Build the pipeline with AEC processors ---  
         processors = [
-            AECProcessorWrapper(self._aec, self._playback_buffer),
+            self._transport.input(),
             self._speech_gate,
             self._stt_service,
             STTStandaloneIFilter(event_logger=self._event_logger),
@@ -276,7 +259,7 @@ class VoicePipelineController:
             self._assistant_aggregator,
             ActionExtractorFilter(self._actions_path, self._event_logger),
             self._tts_service,
-            wrapped_output_processor(),
+            self._transport.output(),
         ]
         return Pipeline(processors)
 
