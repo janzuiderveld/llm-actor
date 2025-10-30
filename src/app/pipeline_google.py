@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from pyaec import Aec
+import numpy as np
+from scipy.signal import resample_poly
+tts_frame_audio: Optional[np.ndarray] = None
+
 from pipecat.frames.frames import (
     AudioRawFrame,
     LLMFullResponseEndFrame,
@@ -155,6 +160,88 @@ class AssistantSpeechGate(FrameProcessor):
             return
         await self.push_frame(frame, direction)
 
+class PyAECProcessor(FrameProcessor):
+    def __init__(self, frame_size: int = 160, filter_length_secs: float = 0.4, sample_rate: int = 16000, **kwargs):
+        super().__init__(**kwargs)
+        filter_length = int(sample_rate * filter_length_secs) # 0.4s
+        self._aec = Aec(frame_size, filter_length, sample_rate, True)
+        self._sr = sample_rate
+        self._tts_sr = 48000
+        self._tts_chans = 1
+
+    async def process_frame(self, frame, direction: FrameDirection):
+        global tts_frame_audio
+        await super().process_frame(frame, direction)
+        # print(frame.name)
+        # microphone/raw audio frames: run AEC and replace mic with cleaned audio
+        if isinstance(frame, InputAudioRawFrame):
+            mic_audio = np.frombuffer(frame.audio, dtype=np.int16)
+            # # display audio RMS levels.
+            # rms_mic = np.sqrt(np.mean(mic_audio.astype(np.float32)**2))
+            # level_mic = int(rms_mic / 600)
+            # level_mic = min(level_mic, 20)
+            # print("MIC LEVEL: " + ("*" * level_mic) + ("." * (20 - level_mic)))
+
+            if tts_frame_audio is not None:
+                # print(mic_audio[:10])
+                # print("AEC:", len(mic_audio), len(tts_frame_audio))
+                tts_audio = np.zeros_like(mic_audio)
+                cleaned = mic_audio.copy()
+
+                # Match lengths (AEC expects equal frame sizes)
+                if len(tts_frame_audio) < len(mic_audio):
+                    tts_audio = np.pad(tts_frame_audio, (0, len(mic_audio) - len(tts_frame_audio)))
+                elif len(tts_frame_audio) > len(mic_audio):
+                    # split tts_frame_audio into chunks of mic_audio length and clean the mic against each
+                    num_chunks = len(tts_frame_audio) // len(mic_audio)
+                    for i in range(num_chunks):
+                        tts_chunk = tts_frame_audio[i * len(mic_audio):(i + 1) * len(mic_audio)]
+                        cleaned = self._aec.cancel_echo(cleaned, tts_chunk)
+                    
+                cleaned = np.clip(cleaned, -32768, 32767).astype(np.int16)
+                frame.audio = cleaned.tobytes()
+            else:
+                # No playback reference available, pass through
+                pass
+
+        await self.push_frame(frame, direction)
+
+class PushUpTTSFrameProcessor(FrameProcessor):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    async def process_frame(self, frame, direction: FrameDirection): 
+        global tts_frame_audio 
+        await super().process_frame(frame, direction)
+        # if isinstance(frame, TTSStartedFrame):
+        #     print("TTS STARTED")
+        #     await self.push_frame(frame, FrameDirection.UPSTREAM)
+        if isinstance(frame, TTSStoppedFrame):
+            # print("TTS STOPPED")
+            tts_frame_audio = None
+            # await self.push_frame(frame, FrameDirection.UPSTREAM)
+        if direction == FrameDirection.DOWNSTREAM and isinstance(frame, TTSAudioRawFrame):
+            # await self.push_frame(frame, FrameDirection.UPSTREAM)
+            # Convert raw PCM bytes (16-bit little-endian) to an int16 numpy array for AEC
+            tts_frame = np.frombuffer(frame.audio, dtype=np.int16)
+            tts_sr = frame.sample_rate
+            tts_chans = frame.num_channels
+            # print("NUM CHANNELS", tts_chans, "SR", tts_sr, "FRAMES", frame.num_frames)
+            if tts_chans == 2:
+                tts_frame = tts_frame.mean(axis=1)
+            down = tts_sr // 16000 # 48000 / 16000 = 3
+            # assert down == 3
+            resampled = resample_poly(tts_frame, up=1, down=down)
+            if tts_frame_audio is None:
+                tts_frame_audio = np.clip(resampled, -32768, 32767).astype(np.int16)
+            else:
+                tts_frame_audio = np.concatenate((
+                    tts_frame_audio,
+                    np.clip(resampled, -32768, 32767).astype(np.int16)
+                ))
+            # print("TTS FRAME CAPTURED FOR AEC", len(tts_frame_audio))
+        await self.push_frame(frame, direction)
+
 @dataclass
 class PipelineComponents:
     pipeline: Pipeline
@@ -193,6 +280,8 @@ class VoicePipelineController:
         self._stt_service = None
         self._llm_service: Optional[GoogleLLMService] = None
         self._tts_service = None
+        self._aec_proc: Optional[PyAECProcessor] = None
+        self._push_up_tts_proc: Optional[PushUpTTSFrameProcessor] = None
         self._speech_gate: Optional[AssistantSpeechGate] = None
         self._user_aggregator: Optional[UserAggregator] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
@@ -228,6 +317,8 @@ class VoicePipelineController:
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
+        self._aec_proc = PyAECProcessor()#out_sr=config.audio.output_sample_rate or config.tts.sample_rate)
+        self._push_up_tts_proc = PushUpTTSFrameProcessor()
         self._speech_gate = AssistantSpeechGate()
 
         context_pair: GoogleContextAggregatorPair = create_google_context(
@@ -251,6 +342,7 @@ class VoicePipelineController:
 
         processors = [
             self._transport.input(),
+            self._aec_proc,
             self._speech_gate,
             self._stt_service,
             STTStandaloneIFilter(event_logger=self._event_logger),
@@ -260,6 +352,7 @@ class VoicePipelineController:
             ActionExtractorFilter(self._actions_path, self._event_logger),
             self._tts_service,
             self._transport.output(),
+            self._push_up_tts_proc,
         ]
         return Pipeline(processors)
 
