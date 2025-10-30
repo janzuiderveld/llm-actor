@@ -8,10 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
-from pyaec import Aec
-import numpy as np
-from scipy.signal import resample_poly
-
 from pipecat.frames.frames import (
     AudioRawFrame,
     LLMFullResponseEndFrame,
@@ -159,68 +155,6 @@ class AssistantSpeechGate(FrameProcessor):
             return
         await self.push_frame(frame, direction)
 
-class PyAECProcessor(FrameProcessor):
-    def __init__(self, frame_size: int = 160, filter_length_secs: float = 0.4, sample_rate: int = 16000, **kwargs):
-        super().__init__(**kwargs)
-        filter_length = int(sample_rate * filter_length_secs) # 0.4s
-        self._aec = Aec(frame_size, filter_length, sample_rate, True)
-        self._tts_frame_audio: Optional[np.ndarray] = None
-        self._sr = sample_rate
-        self._tts_sr = 48000
-        self._tts_chans = 2
-
-    async def process_frame(self, frame, direction: FrameDirection):  # type: ignore[override]
-        await super().process_frame(frame, direction)
-        # print(frame.name)
-
-        # playback reference frames: typically TTS audio frames
-        if isinstance(frame, TTSAudioRawFrame):
-            # Convert raw PCM bytes (16-bit little-endian) to an int16 numpy array for AEC
-            stereo = np.frombuffer(frame.audio, dtype=np.int16)
-            self._tts_sr = frame.sample_rate
-            self._tts_chans = frame.num_channels
-            print("NUM CHANNELS", self._tts_chans, "SR", self._tts_sr, "FRAMES", frame.num_frames)
-            if self._tts_chans == 2:
-                mono = stereo.mean(axis=1)
-            else:
-                mono = stereo
-            down = self._tts_sr / self._sr # 48000 / 16000 = 3
-            assert down == 3
-            resampled = resample_poly(mono, up=1, down=down)
-            self._tts_frame_audio = np.clip(resampled, -32768, 32767).astype(np.int16)
-
-            print("TTS FRAME CAPTURED FOR AEC", len(self._tts_frame_audio))
-            # quit()
-            await self.push_frame(frame, direction)
-
-        # microphone/raw audio frames: run AEC and replace data
-        if isinstance(frame, InputAudioRawFrame):
-
-            if self._tts_frame_audio is not None:
-                mic_audio = np.frombuffer(frame.audio, dtype=np.int16)
-                print("AEC:", len(mic_audio), len(self._tts_frame_audio))
-
-                mic_len = len(mic_audio) # 320
-                first_ref = self._tts_frame_audio[:mic_len]
-                cleaned = self._aec.cancel_echo(mic_audio, first_ref)
-                cleaned_arr = np.array(cleaned, dtype=np.int16)
-                cleaned_arr = cleaned_arr[:mic_len//2]
-                second_ref = self._tts_frame_audio[-mic_len:]
-                cleaned = self._aec.cancel_echo(mic_audio, second_ref)
-                cleaned_second = np.array(cleaned, dtype=np.int16)[:mic_len//2]
-                # combine both cleaned halves
-                cleaned_arr = np.concatenate([cleaned_arr, cleaned_second])
-                # print(cleaned_arr)
-                frame.audio = cleaned_arr.tobytes()
-                self._tts_frame_audio = None
-                return
-            else:
-                # No playback reference available, pass through
-                pass
-
-        await self.push_frame(frame, direction)
-
-
 @dataclass
 class PipelineComponents:
     pipeline: Pipeline
@@ -259,7 +193,6 @@ class VoicePipelineController:
         self._stt_service = None
         self._llm_service: Optional[GoogleLLMService] = None
         self._tts_service = None
-        self._aec_proc: Optional[PyAECProcessor] = None
         self._speech_gate: Optional[AssistantSpeechGate] = None
         self._user_aggregator: Optional[UserAggregator] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
@@ -295,7 +228,6 @@ class VoicePipelineController:
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
-        self._aec_proc = PyAECProcessor()#out_sr=config.audio.output_sample_rate or config.tts.sample_rate)
         self._speech_gate = AssistantSpeechGate()
 
         context_pair: GoogleContextAggregatorPair = create_google_context(
@@ -328,7 +260,6 @@ class VoicePipelineController:
             ActionExtractorFilter(self._actions_path, self._event_logger),
             self._tts_service,
             self._transport.output(),
-            self._aec_proc,
         ]
         return Pipeline(processors)
 
