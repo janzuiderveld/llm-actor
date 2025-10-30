@@ -55,7 +55,6 @@ from services.tts import build_deepgram_tts
 UserCallback = Callable[[str], Awaitable[None]]
 LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
 
-
 class UserAggregator(GoogleUserContextAggregator):
     def __init__(
         self,
@@ -292,7 +291,7 @@ class VoicePipelineController:
             output_device_index=config.audio.output_device_index,
         )
         self._transport = LocalAudioTransport(transport_params)
-
+        
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
