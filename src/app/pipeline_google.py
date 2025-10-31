@@ -13,6 +13,8 @@ import numpy as np
 from scipy.signal import resample_poly
 tts_frame_audio: Optional[np.ndarray] = None
 
+from collections import deque
+
 from pipecat.frames.frames import (
     AudioRawFrame,
     LLMFullResponseEndFrame,
@@ -168,43 +170,36 @@ class PyAECProcessor(FrameProcessor):
         self._sr = sample_rate
         self._tts_sr = 48000
         self._tts_chans = 1
+        self._playback_buffer = deque(maxlen=48000 * 2)
+        
+    def add_tts_audio(self, tts_audio: np.ndarray):
+        """Feed TTS playback audio into the AEC buffer (downsampled to 16kHz mono)."""
+        if tts_audio is None or len(tts_audio) == 0:
+            return
+        # Limit buffer growth
+        if len(self._playback_buffer) + len(tts_audio) > self._playback_buffer.maxlen:
+            excess = len(self._playback_buffer) + len(tts_audio) - self._playback_buffer.maxlen
+            for _ in range(excess):
+                self._playback_buffer.popleft()
+        self._playback_buffer.extend(tts_audio)
 
     async def process_frame(self, frame, direction: FrameDirection):
-        global tts_frame_audio
         await super().process_frame(frame, direction)
-        # print(frame.name)
-        # microphone/raw audio frames: run AEC and replace mic with cleaned audio
+
         if isinstance(frame, InputAudioRawFrame):
             mic_audio = np.frombuffer(frame.audio, dtype=np.int16)
-            # # display audio RMS levels.
-            # rms_mic = np.sqrt(np.mean(mic_audio.astype(np.float32)**2))
-            # level_mic = int(rms_mic / 600)
-            # level_mic = min(level_mic, 20)
-            # print("MIC LEVEL: " + ("*" * level_mic) + ("." * (20 - level_mic)))
 
-            if tts_frame_audio is not None:
-                # print(mic_audio[:10])
-                # print("AEC:", len(mic_audio), len(tts_frame_audio))
-                tts_audio = np.zeros_like(mic_audio)
-                cleaned = mic_audio.copy()
-
-                # Match lengths (AEC expects equal frame sizes)
-                if len(tts_frame_audio) < len(mic_audio):
-                    tts_audio = np.pad(tts_frame_audio, (0, len(mic_audio) - len(tts_frame_audio)))
-                elif len(tts_frame_audio) > len(mic_audio):
-                    # split tts_frame_audio into chunks of mic_audio length and clean the mic against each
-                    num_chunks = len(tts_frame_audio) // len(mic_audio)
-                    for i in range(num_chunks):
-                        tts_chunk = tts_frame_audio[i * len(mic_audio):(i + 1) * len(mic_audio)]
-                        cleaned = self._aec.cancel_echo(cleaned, tts_chunk)
-                    
+            if len(self._playback_buffer) > 0:
+                # Take a slice of playback audio equal to the mic chunk length
+                tts_audio = np.array([self._playback_buffer.popleft() for _ in range(min(len(mic_audio), len(self._playback_buffer)))])
+                if len(tts_audio) < len(mic_audio):
+                    tts_audio = np.pad(tts_audio, (0, len(mic_audio) - len(tts_audio)))
+                cleaned = self._aec.cancel_echo(mic_audio, tts_audio)
                 cleaned = np.clip(cleaned, -32768, 32767).astype(np.int16)
                 frame.audio = cleaned.tobytes()
-            else:
-                # No playback reference available, pass through
-                pass
 
         await self.push_frame(frame, direction)
+
 
 class PushUpTTSFrameProcessor(FrameProcessor):
     def __init__(self, **kwargs):
@@ -221,25 +216,22 @@ class PushUpTTSFrameProcessor(FrameProcessor):
             tts_frame_audio = None
             # await self.push_frame(frame, FrameDirection.UPSTREAM)
         if direction == FrameDirection.DOWNSTREAM and isinstance(frame, TTSAudioRawFrame):
-            # await self.push_frame(frame, FrameDirection.UPSTREAM)
-            # Convert raw PCM bytes (16-bit little-endian) to an int16 numpy array for AEC
             tts_frame = np.frombuffer(frame.audio, dtype=np.int16)
             tts_sr = frame.sample_rate
             tts_chans = frame.num_channels
-            # print("NUM CHANNELS", tts_chans, "SR", tts_sr, "FRAMES", frame.num_frames)
+            
+            # Convert stereo → mono
             if tts_chans == 2:
-                tts_frame = tts_frame.mean(axis=1)
-            down = tts_sr // 16000 # 48000 / 16000 = 3
-            # assert down == 3
+                tts_frame = tts_frame.reshape(-1, 2).mean(axis=1)
+
+            # Resample to 16kHz for AEC
+            down = tts_sr // 16000
             resampled = resample_poly(tts_frame, up=1, down=down)
-            if tts_frame_audio is None:
-                tts_frame_audio = np.clip(resampled, -32768, 32767).astype(np.int16)
-            else:
-                tts_frame_audio = np.concatenate((
-                    tts_frame_audio,
-                    np.clip(resampled, -32768, 32767).astype(np.int16)
-                ))
-            # print("TTS FRAME CAPTURED FOR AEC", len(tts_frame_audio))
+            resampled = np.clip(resampled, -32768, 32767).astype(np.int16)
+
+            # Feed into AEC processor (instead of global)
+            if hasattr(self, "_aec_ref") and self._aec_ref:
+                self._aec_ref.add_tts_audio(resampled)
         await self.push_frame(frame, direction)
 
 @dataclass
@@ -340,6 +332,7 @@ class VoicePipelineController:
             on_partial=self._on_assistant_partial,
         )
 
+        self._push_up_tts_proc._aec_ref = self._aec_proc
         processors = [
             self._transport.input(),
             self._aec_proc,
