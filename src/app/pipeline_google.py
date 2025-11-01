@@ -169,8 +169,7 @@ class PyAECProcessor(FrameProcessor):
         self._aec = Aec(frame_size, filter_length, sample_rate, True)
         self._sr = sample_rate
         self._tts_sr = 48000
-        self._tts_chans = 1
-        self._playback_buffer = deque(maxlen=self._tts_sr // 2)
+        self._playback_buffer = deque(maxlen=self._tts_sr // 3)
         self._post_tts_timeout = 100  # number of frames to keep AEC after TTS ends
         self._post_tts_counter = 0
         
@@ -195,18 +194,19 @@ class PyAECProcessor(FrameProcessor):
                 print("AEC: cleared playback buffer after TTS end")
             elif self._post_tts_counter < self._post_tts_timeout:
                 self._post_tts_counter += 1
+
             mic_audio = np.frombuffer(frame.audio, dtype=np.int16)
             cleaned = mic_audio.copy()
             tts_audio = np.array(self._playback_buffer, dtype=np.int16)
 
             if len(tts_audio) > 0:
-                # print("=== AEC:", len(mic_audio), "mic samples;", len(tts_audio), "TTS samples")
+                # print("========== AEC:", len(mic_audio), "mic samples;", len(tts_audio), "TTS samples")
                 # print dots to indicate AEC activity
-                print(".", end="", flush=True)
+                # print(".", end="", flush=True)
                 if len(tts_audio) < len(mic_audio):
                     tts_audio = np.pad(tts_audio, (0, len(mic_audio) - len(tts_audio)))
                     cleaned = self._aec.cancel_echo(mic_audio, tts_audio)
-                if len(tts_audio) > len(mic_audio):
+                if len(tts_audio) >= len(mic_audio):
                     # split buffer into chunks of mic_audio length and clean the mic against each
                     num_chunks = len(tts_audio) // len(mic_audio)
                     max_rms = 1000
@@ -216,13 +216,13 @@ class PyAECProcessor(FrameProcessor):
                         rms = np.sqrt(np.mean(cleaned.astype(np.float32)**2))
                         if rms > max_rms:
                             max_rms = rms
-                        if i > 5 and rms < max_rms * 0.3:
+                        if i > 3 and rms < max_rms * 0.3:
                             # print(f"AEC: early exit after {i+1} chunks")
                             # print(i, end="", flush=True)
                             # Early exit if signal is sufficiently cleaned
                             break
 
-                        # print(f"AEC chunk {i+1}/{num_chunks}, RMS after AEC: {rms:.2f}")
+                    # print("Done after", i + 1, "chunks; max RMS:", int(max_rms))
 
             cleaned = np.clip(cleaned, -32768, 32767).astype(np.int16)
             frame.audio = cleaned.tobytes()
@@ -240,23 +240,22 @@ class PushUpTTSFrameProcessor(FrameProcessor):
             # print("TTS STARTED")
             self._aec_ref._post_tts_counter = self._aec_ref._post_tts_timeout + 1
         #     await self.push_frame(frame, FrameDirection.UPSTREAM)
-        if isinstance(frame, TTSStoppedFrame):
+        if isinstance(frame, TTSStoppedFrame) or isinstance(frame, UserStartedSpeakingFrame):
             # print("TTS STOPPED")
             self._aec_ref._post_tts_counter = 0
             # await self.push_frame(frame, FrameDirection.UPSTREAM)
         if direction == FrameDirection.DOWNSTREAM and isinstance(frame, TTSAudioRawFrame):
             tts_frame = np.frombuffer(frame.audio, dtype=np.int16)
             tts_sr = frame.sample_rate
-            tts_chans = frame.num_channels
-            
+
             # Convert stereo → mono
-            if tts_chans == 2:
+            if frame.num_channels == 2:
                 tts_frame = tts_frame.reshape(-1, 2).mean(axis=1)
 
             # Resample to 16kHz for AEC
             down = tts_sr // 16000
             resampled = resample_poly(tts_frame, up=1, down=down)
-            resampled = np.clip(resampled, -32768, 32767).astype(np.int16)
+            # resampled = np.clip(resampled, -32768, 32767).astype(np.int16)
 
             # Feed into AEC processor (instead of global)
             if hasattr(self, "_aec_ref") and self._aec_ref:
