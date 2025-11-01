@@ -11,7 +11,6 @@ from typing import Awaitable, Callable, Optional
 from pyaec import Aec
 import numpy as np
 from scipy.signal import resample_poly
-tts_frame_audio: Optional[np.ndarray] = None
 
 from collections import deque
 
@@ -41,6 +40,7 @@ from pipecat.services.google.llm import (
 )
 from pipecat.services.google.llm import LLMAssistantAggregatorParams, LLMUserAggregatorParams
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+import app.resampler_patch # fix soxr resampler issue in pipecat
 
 from app.config import ConfigManager, RuntimeConfig, get_api_keys
 from app.devices import ensure_devices_selected
@@ -201,6 +201,8 @@ class PyAECProcessor(FrameProcessor):
 
             if len(tts_audio) > 0:
                 # print("=== AEC:", len(mic_audio), "mic samples;", len(tts_audio), "TTS samples")
+                # print dots to indicate AEC activity
+                print(".", end="", flush=True)
                 if len(tts_audio) < len(mic_audio):
                     tts_audio = np.pad(tts_audio, (0, len(mic_audio) - len(tts_audio)))
                     cleaned = self._aec.cancel_echo(mic_audio, tts_audio)
@@ -214,8 +216,9 @@ class PyAECProcessor(FrameProcessor):
                         rms = np.sqrt(np.mean(cleaned.astype(np.float32)**2))
                         if rms > max_rms:
                             max_rms = rms
-                        if i > 6 and rms < max_rms * 0.3:
-                            print(f"AEC: early exit after {i+1} chunks")
+                        if i > 5 and rms < max_rms * 0.3:
+                            # print(f"AEC: early exit after {i+1} chunks")
+                            # print(i, end="", flush=True)
                             # Early exit if signal is sufficiently cleaned
                             break
 
