@@ -358,8 +358,7 @@ class VoicePipelineController:
             on_partial=self._on_assistant_partial,
         )
 
-        # if config.audio.aec_enabled, include _aec_proc in pipeline else skip it
-        if not getattr(config.audio, "aec_enabled", False):
+        if not config.audio.aec_enabled:
             # replace real AEC with a no-op shim that forwards frames but ignores TTS feeding
             class _NoopAEC(FrameProcessor):
                 def __init__(self, **kwargs):
