@@ -38,6 +38,7 @@ RUNTIME_CONFIG = {
         "output_device_index": 3,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
+        "aec_enabled": True,
     },
     "stt": {
         "model": "deepgram-flux",

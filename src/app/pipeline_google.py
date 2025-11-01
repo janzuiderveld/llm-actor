@@ -214,14 +214,13 @@ class PyAECProcessor(FrameProcessor):
                         rms = np.sqrt(np.mean(cleaned.astype(np.float32)**2))
                         if rms > max_rms:
                             max_rms = rms
-                        if i > 4 and rms < max_rms * 0.3:
-                            # print(f"AEC: early exit after {i+1} chunks")
+                        if i > 6 and rms < max_rms * 0.3:
+                            print(f"AEC: early exit after {i+1} chunks")
                             # Early exit if signal is sufficiently cleaned
                             break
 
                         # print(f"AEC chunk {i+1}/{num_chunks}, RMS after AEC: {rms:.2f}")
 
-            
             cleaned = np.clip(cleaned, -32768, 32767).astype(np.int16)
             frame.audio = cleaned.tobytes()
 
@@ -336,7 +335,7 @@ class VoicePipelineController:
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
-        self._aec_proc = PyAECProcessor()#out_sr=config.audio.output_sample_rate or config.tts.sample_rate)
+        self._aec_proc = PyAECProcessor()
         self._push_up_tts_proc = PushUpTTSFrameProcessor()
         self._speech_gate = AssistantSpeechGate()
 
@@ -359,6 +358,23 @@ class VoicePipelineController:
             on_partial=self._on_assistant_partial,
         )
 
+        # if config.audio.aec_enabled, include _aec_proc in pipeline else skip it
+        if not getattr(config.audio, "aec_enabled", False):
+            # replace real AEC with a no-op shim that forwards frames but ignores TTS feeding
+            class _NoopAEC(FrameProcessor):
+                def __init__(self, **kwargs):
+                    super().__init__(**kwargs)
+                    self._post_tts_counter = 0
+                    self._post_tts_timeout = -1
+                async def process_frame(self, frame, direction: FrameDirection):
+                    await super().process_frame(frame, direction)
+                    # do nothing
+                    await self.push_frame(frame, direction)
+                def add_tts_audio(self, tts_audio: np.ndarray):
+                    # no-op when AEC is disabled
+                    return
+            self._aec_proc = _NoopAEC()
+        
         self._push_up_tts_proc._aec_ref = self._aec_proc
         processors = [
             self._transport.input(),
