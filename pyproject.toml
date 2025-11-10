@@ -4,18 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-actor"
-version = "0.1.0"
-description = "Thin Pipecat wrapper for Deepgram Flux → Gemini → Deepgram Aura voice pipeline"
-authors = [{name = "Jan Zuiderveld"}]
+version = "0.1.1"
+description = "Thin Pipecat wrapper for Deepgram Flux → Gemini/Ollama → Deepgram Aura voice pipeline"
+authors = [{name = "Jan Zuiderveld, Grigore Burloiu, Lorena Cocora"}]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "pipecat-ai[deepgram,google,local]",
+    "pipecat-ai[deepgram,google,local,silero,local-smart-turn-v3]",
     "python-dotenv",
     "pydantic",
     "sounddevice>=0.4",
     "typer>=0.9",
     "watchfiles",
+    "transformers[torch]==4.48.2",
+    "onnx",
+    "onnxruntime"
 ]
 
 [project.optional-dependencies]
