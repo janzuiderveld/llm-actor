@@ -236,4 +236,5 @@ def get_api_keys() -> Dict[str, Optional[str]]:
     return {
         "google": _env("GOOGLE_API_KEY"),
         "deepgram": _env("DEEPGRAM_API_KEY"),
+        "ollama_base_url": _env("OLLAMA_BASE_URL"),
     }
