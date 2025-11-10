@@ -32,8 +32,15 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 #     GoogleLLMService,
 #     GoogleUserContextAggregator,
 # )
+from pipecat.services.openai.llm import (
+    OpenAIAssistantContextAggregator,
+    OpenAIContextAggregatorPair,
+    OpenAIUserContextAggregator,
+    OpenAILLMService,
+)
 from pipecat.services.ollama.llm import OLLamaLLMService
 # from pipecat.services.google.llm import LLMAssistantAggregatorParams, LLMUserAggregatorParams
+from pipecat.services.openai.llm import LLMAssistantAggregatorParams, LLMUserAggregatorParams
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 
 from app.config import ConfigManager, RuntimeConfig, get_api_keys
@@ -196,8 +203,8 @@ class VoicePipelineController:
         self._llm_service: Optional[OLLamaLLMService] = None
         self._tts_service = None
         self._speech_gate: Optional[AssistantSpeechGate] = None
-        # self._user_aggregator: Optional[UserAggregator] = None
-        # self._assistant_aggregator: Optional[AssistantAggregator] = None
+        self._user_aggregator: Optional[OpenAIUserContextAggregator] = None
+        self._assistant_aggregator: Optional[OpenAIAssistantContextAggregator] = None
 
     async def _on_user_message(self, text: str) -> None:
         if self._components:
