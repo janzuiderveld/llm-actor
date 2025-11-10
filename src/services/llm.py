@@ -6,6 +6,8 @@ from pipecat.services.google.llm import (
     GoogleLLMService,
 )
 
+from pipecat.services.ollama.llm import OLLamaLLMService
+
 from app.config import RuntimeConfig
 
 
@@ -17,6 +19,18 @@ def build_google_llm(config: RuntimeConfig, api_key: str) -> GoogleLLMService:
     return GoogleLLMService(
         api_key=api_key,
         model=config.llm.model,
+        params=params,
+        system_instruction=config.llm.system_prompt,
+    )
+
+def build_ollama_llm(config: RuntimeConfig, base_url: str = "http://localhost:11434/v1") -> OLLamaLLMService:
+    params = OLLamaLLMService.InputParams(
+        max_tokens=config.llm.max_tokens,
+        temperature=config.llm.temperature,
+    )
+    return OLLamaLLMService(
+        model=config.llm.model,
+        base_url=base_url,
         params=params,
         system_instruction=config.llm.system_prompt,
     )

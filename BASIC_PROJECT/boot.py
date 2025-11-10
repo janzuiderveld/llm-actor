@@ -33,8 +33,8 @@ SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + PROMPT_APPEND
 # Default runtime settings; tweak these to match your hardware and providers.
 RUNTIME_CONFIG = {
     "audio": {
-        "input_device_index": 2,
-        "output_device_index": 3,
+        "input_device_index": 1,
+        "output_device_index": 2,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
     },
@@ -46,7 +46,7 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "gemini-2.5-flash",
+        "model": "deepseek-r1:1.5b",
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
@@ -67,11 +67,7 @@ def main() -> None:
 
     # Start the CLI plus helper scripts; the terminals make their logs easy to follow.
     processes = [
-        launch_module("app.cli"),
-        # launch_module_in_terminal(
-        #     "BASIC_PROJECT.inbox_writer",
-        #     title="Inbox Writer",
-        # ),
+        launch_module("app_ollama.cli"),
     ]
 
     try:
