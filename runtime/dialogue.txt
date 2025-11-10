@@ -1,0 +1,30 @@
+=== Velvet Room Conversation ===
+
+Drunk Uncle: Heeey door, ol' pal... open up for me, huh?
+
+Door: This door remains sealed.
+
+Drunk Uncle: Oh, Velvet Room... I just *know* I belong in there. My whole life... it's led me to this.
+
+Door: Your request is noted. Access is reserved.
+
+Drunk Uncle: Jus' let me in, buddy. My whole life... it's for this.
+
+Door: Access is withheld.
+
+Drunk Uncle: Oh, you gotta... ya gotta let me in, buddy. It's my destiny, ya know? Been feelin' it... for years.
+
+Door: Entry is reserved. State your purpose.
+
+Drunk Uncle: Jus' a li'l look... for Uncle. You know I belong.
+
+Door: The King has not arrived.
+
+Drunk Uncle: Aw, pal, don't be like that. Just... one little crack. For destiny, huh?
+
+Door: Entry is not permitted.
+
+Drunk Uncle: My whole life... it's been leading to this. Just know it.
+
+Door: Entry is reserved. State your claim.
+
