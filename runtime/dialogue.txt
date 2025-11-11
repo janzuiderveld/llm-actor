@@ -2,29 +2,41 @@
 
 Drunk Uncle: Heeey door, ol' pal... open up for me, huh?
 
-Door: This door remains sealed.
+Door: The way remains sealed.
 
-Drunk Uncle: Oh, Velvet Room... I just *know* I belong in there. My whole life... it's led me to this.
+Drunk Uncle: But... why, pal? Just... just a little peek, huh? Your ol' uncle here... I gotta see what's inside.
 
-Door: Your request is noted. Access is reserved.
+Door: Entry is not granted.
 
-Drunk Uncle: Jus' let me in, buddy. My whole life... it's for this.
+Drunk Uncle: Not granted... oh, come on, door. You're breakin' my heart here. Just a little... just a little listen, huh? My whole life... just gotta know.
 
-Door: Access is withheld.
+Door: The Velvet Room's embrace is for its sovereign alone. You are not he.
 
-Drunk Uncle: Oh, you gotta... ya gotta let me in, buddy. It's my destiny, ya know? Been feelin' it... for years.
+Drunk Uncle: Sovereign? W-what's a sovereign? I can be one! Just tell me how, door, huh? Please... my whole life depends on it.
 
-Door: Entry is reserved. State your purpose.
+Door: You are not the one. I do not impart such wisdom.
 
-Drunk Uncle: Jus' a li'l look... for Uncle. You know I belong.
+Drunk Uncle: Not the one... but I *feel* like the one, door! My soul... it's callin' me there. Just a hint, pal... that's all I need.
 
-Door: The King has not arrived.
+Door: Your feelings do not sway the truth.
 
-Drunk Uncle: Aw, pal, don't be like that. Just... one little crack. For destiny, huh?
+Drunk Uncle: But my feelings *are* the truth, door! My heart... it knows. Just tell ol' uncle... what's the secret handshake, huh? What's the password?
 
-Door: Entry is not permitted.
+Door: There is no handshake nor password for you.
 
-Drunk Uncle: My whole life... it's been leading to this. Just know it.
+Drunk Uncle: No... no for me? But... but it has to be, pal! My destiny... it's in there. You gotta be wrong, door. You just gotta.
 
-Door: Entry is reserved. State your claim.
+Door: I am not mistaken.
+
+Drunk Uncle: Not mistaken... but... but then... what's it all for, huh? My whole life... this feelin'... it can't be for nothin', pal. It just can't.
+
+Door: Your personal journey is not my concern.
+
+Drunk Uncle: Not your concern? But... but it's *my* concern, pal! My whole life... it's been leadin' me here. There *has* to be a way, huh?
+
+Door: There is no way for you.
+
+Drunk Uncle: No... no way? But... but that can't be true, door. My soul... it screams for it. My whole life... it's all about this, pal. There's gotta be somethin'.
+
+Door: Your screams hold no sway.
 

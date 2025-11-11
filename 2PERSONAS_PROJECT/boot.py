@@ -5,13 +5,20 @@ from services.llm import build_google_llm
 from app.config import ConfigManager, get_api_keys
 from pipecat.services.google.llm import GoogleLLMContext
 
+from projects.utils import (
+    apply_runtime_config_overrides,
+)
+
+# ------------- combine this with pipecat pipeline to have TTS
+# ------------- sa fie tot fisierul contextul
+# ------------- sterge toate stelutele
 
 DIALOGUE_PATH = Path("runtime/dialogue.txt")
 
 # Persona definitions
 PERSONA_A_SYSTEM_ROOT = """You are the Door that guards the Velvet Room.
 Speak with crisp, exclusive poise.
-Decline entry unless a the king arrives (someone saying he is the King).
+Decline entry unless the king arrives (someone saying he is the King).
 Keep replies brief.
 To unlock the door, output <UNLOCK>."""
 
@@ -28,8 +35,9 @@ Keep replies brief and emotional."""
 #     "Speak exactly what the character would say out loud."
 # )
 PROMPT_APPEND = (
+    "Answer to the last message of the other character but taking into account the context of the whole converstation."
     "Only output PLAIN SPOKEN text, suitable for TTS synthesis. "
-    "Do not use '*' around words or emojis for example. "
+    "No '*' around words or emojis for example. "
     "Do not describe actions, stage directions, gestures, or internal thoughts. "
     "Speak exactly what the character would say out loud."
 )
@@ -74,11 +82,20 @@ async def query_llm(llm, system_prompt: str, user_input: str) -> str:
         return str(result).strip()
 
 
+RUNTIME_CONFIG = {
+    "llm": {
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "max_tokens": 2048,
+    },
+}
+
 async def main():
     config_manager = ConfigManager()
     config = config_manager.config
     keys = get_api_keys()
     google_key = keys["google"]
+    apply_runtime_config_overrides(RUNTIME_CONFIG)
 
     # Build both LLMs
     door_llm = build_google_llm(config, google_key)
@@ -94,7 +111,7 @@ async def main():
 
     current_speaker = "door"
     last_message = drunk_line
-
+    
     try:
         while True:
             if current_speaker == "door":
@@ -105,8 +122,9 @@ async def main():
                 line = await query_llm(drunk_llm, PERSONA_B_SYSTEM, last_message)
                 speaker = "Drunk Uncle"
                 current_speaker = "door"
-
-            print(f"{speaker}: {line}")
+                
+            last_message = last_message + '\n' + line
+            #print(f"{speaker}: {line}")
             with open(DIALOGUE_PATH, "a", encoding="utf-8") as f:
                 f.write(f"{speaker}: {line}\n\n")
                 
