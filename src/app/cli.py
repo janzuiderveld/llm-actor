@@ -5,6 +5,7 @@ from typing import Optional
 
 import typer
 
+from .pipeline_2_personas import run_voice_pipeline
 
 app = typer.Typer(add_completion=False)
 
@@ -19,6 +20,7 @@ def main(session_name: Optional[str] = typer.Option(None, help="Optional session
             from .pipeline_groq import run_voice_pipeline
         else:
             from .pipeline_google import run_voice_pipeline
+
         asyncio.run(run_voice_pipeline(session_name=session_name))
     except KeyboardInterrupt:  # pragma: no cover - interactive use
         typer.echo("Interrupted by user")

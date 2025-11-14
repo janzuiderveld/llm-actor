@@ -1,6 +1,6 @@
 {
   "audio": {
-    "input_device_index": 2,
+    "input_device_index": 1,
     "output_device_index": 3,
     "output_sample_rate": 48000,
     "auto_select_devices": false,
@@ -14,9 +14,9 @@
     "eot_timeout_ms": 1500
   },
   "llm": {
-    "model": "gemini-2.5-flash",
+    "model": "openai/gpt-oss-20b",
     "temperature": 0.2,
-    "max_tokens": 2048,
+    "max_tokens": 1024,
     "system_prompt": "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>.\n\nOnly output text to be synthesized by a TTS system, no '*' around words or emojis for example"
   },
   "tts": {
