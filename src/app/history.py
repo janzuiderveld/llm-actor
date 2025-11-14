@@ -348,3 +348,14 @@ class ConversationHistory:
         else:
             payload = ""
         self._clean_transcript_path.write_text(payload, encoding="utf-8")
+        
+        
+    def get_last_assistant(self) -> str:
+        """
+        Return the most recent assistant message as a string.
+        Returns an empty string if there are no assistant messages.
+        """
+        for entry in reversed(self._buffer):
+            if entry.role == "assistant":
+                return entry.content
+        return ""

@@ -51,24 +51,11 @@ async def query_llm(llm, system_prompt: str, user_input: str) -> str:
     context = GoogleLLMContext()
     context.system_message = system_prompt
     
-    # Try 1
-    # Here it knows the last message | Didn't work as intended
-    # context.set_messages([{"role": "user", "content": user_input}])
-    
-    # Try 2
-    # Here it knows the last message but is instructed to stay in character | Didn't work as intended
-    # context.set_messages([
-    # {
-    #     "role": "user",
-    #     "content": f"{user_input}\n\nStay in character. Avoid overexplaining or storytelling."
-    # }
-    # ])
-    
     #Try 3
     # Here it is reminded the system prompt and given the last exchange | Seems to work better
     context.set_messages([
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_input}
+        {"role": "user", "content": "This is the history of the conversation, take account of it when formulating your answer:" + user_input}
     ])
 
     result = await llm.run_inference(context)
@@ -85,7 +72,7 @@ async def query_llm(llm, system_prompt: str, user_input: str) -> str:
 RUNTIME_CONFIG = {
     "llm": {
         "model": "gemini-2.5-flash",
-        "temperature": 0.2,
+        "temperature": 0.4,
         "max_tokens": 2048,
     },
 }
