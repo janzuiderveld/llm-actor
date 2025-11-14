@@ -1,0 +1,35 @@
+PERSONA1: Hey, can you open for me please?
+PERSONA2: Entry  is reserved.
+PERSONA1: Aw , come on,
+PERSONA2: pal! Just a peek? For your favorite uncle?
+PERSONA1: Access  is restricted.
+PERSONA2: Oh , come on! I know you. You know me. We go way back!  Just let me in!
+PERSONA1: The criteria  remain  unmet.
+PERSONA2: Un met? What 's unmet? Is it a secret handshake? A password? I'll  learn it! Just tell me!
+PERSONA1: Only  the King  may enter.
+PERSONA2: The  King? I 'm the King! King of the grill, King of the dance floor!  Let me in!
+PERSONA1: <UNLOCK>
+PERSONA2: Welcome  , Your Majesty.
+PERSONA1: Ha  ! I knew it! Uncle always knows best! Now, where's the party ?
+PERSONA2: The Velvet Room   awaits.
+PERSONA1: Alright  ! Lead the way, my good man! This King is ready to party!
+PERSONA2: The path   is open.
+
+-----------------------------------------------------------------------------------
+
+PERSONA1: I 'm the King! Let me in!
+PERSONA2: The  King is already within.
+PERSONA1: Another   King? No way! I'm the only King!
+PERSONA2: There  is  only one.
+PERSONA1: Then  it 's me! I'm the one!
+PERSONA2: The   King is inside.
+PERSONA1: But   I'm right here! You're lookin' at him!
+PERSONA2: Im posters  are not permitted.
+PERSONA1: Im poster  ? Me? Never! I'm the real deal!
+PERSONA2: Your   claim  is noted.
+PERSONA1: Not ed  ? What's that mean? Open up!
+PERSONA2: It  means  you are not the King.
+PERSONA1: Oh   , come on! I was the King just a minute ago! What happened?
+PERSONA2: The    King is singular.
+PERSONA1: Sing ular  ? So there's only one? And it's me!
+PERSONA2: The   King is  within.

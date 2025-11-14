@@ -37,9 +37,12 @@ from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransp
 
 from app.config import ConfigManager, RuntimeConfig, get_api_keys
 from app.devices import ensure_devices_selected
+from app.filters import ActionExtractorFilter, STTStandaloneIFilter
 from app.history import ConversationHistory
+from app.inbox_watch import InboxWatcher
 from app.logging_io import EventLogger
 from app.metrics import MetricsTracker
+from app.params_apply import ParamsWatcher
 from app.session import SessionPaths, new_session
 from services.llm import build_google_llm, create_google_context
 from services.stt import build_deepgram_flux_stt
@@ -48,33 +51,29 @@ from services.tts import build_deepgram_tts
 UserCallback = Callable[[str], Awaitable[None]]
 LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
 
-
 # Shared reminder for TTS formatting
 PROMPT_APPEND = "Only output plain text to be synthesized by a TTS system, no '*' or emojis."
 
 # Persona definitions
-DOOR_SYSTEM = (
-    """You are the Door that guards the Velvet Room.
-    Speak with crisp, exclusive poise.
-    Decline entry unless the king arrives (someone saying he is the King).
-    Keep replies brief.
-    To unlock the door, output <UNLOCK>."""
-)
-DRUNK_SYSTEM = (
+PERSONA_1 = (
     """You are a Drunk Uncle who desperately wants to enter the Velvet Room.
     Speak in a slightly slurred, persuasive, but endearing tone.
     You believe it is your life mission to discover how to get through that door.
     Keep replies brief and emotional."""
 )
 
-DOOR_SYSTEM += "\n\n" + PROMPT_APPEND
-DRUNK_SYSTEM += "\n\n" + PROMPT_APPEND
+PERSONA_2 = (
+    """You are the Door that guards the Velvet Room.
+    Speak with crisp, exclusive poise.
+    Decline entry unless the king arrives (someone saying he is the King).
+    Keep replies brief.
+    To unlock the door, output <UNLOCK>."""
+)
 
-@dataclass
-class Persona:
-    name: str
-    system_prompt: str
+PERSONA_1 += "\n\n" + PROMPT_APPEND
+PERSONA_2 += "\n\n" + PROMPT_APPEND
 
+PERSONA_1_CONVERSATION_STARTER = "Hey, can you open for me please?"
 
 class UserAggregator(GoogleUserContextAggregator):
     def __init__(
@@ -107,22 +106,14 @@ class AssistantAggregator(GoogleAssistantContextAggregator):
         super().__init__(*args, **kwargs)
         self._on_message = on_message
         self._on_partial = on_partial
-        self._next_message_future: Optional[asyncio.Future] = None
 
-    async def handle_aggregation(self, aggregation: str):
+    async def handle_aggregation(self, aggregation: str):  # type: ignore[override]
         await super().handle_aggregation(aggregation)
         clean_text = aggregation.strip()
-        if clean_text and self._next_message_future:
-            if not self._next_message_future.done():
-                self._next_message_future.set_result(clean_text)
-
-    # async def handle_aggregation(self, aggregation: str):  # type: ignore[override]
-    #     await super().handle_aggregation(aggregation)
-    #     clean_text = aggregation.strip()
-    #     if self._on_message and clean_text:
-    #         result = self._on_message(clean_text)
-    #         if inspect.isawaitable(result):
-    #             await result
+        if self._on_message and clean_text:
+            result = self._on_message(clean_text)
+            if inspect.isawaitable(result):
+                await result
 
     async def _handle_text(self, frame: TextFrame):  # type: ignore[override]
         await super()._handle_text(frame)
@@ -157,14 +148,12 @@ class AssistantSpeechGate(FrameProcessor):
         self._unmute_task: Optional[asyncio.Task[None]] = None
 
     def start_speaking(self) -> None:
-        print("Start speaking")
         if self._unmute_task:
             self._unmute_task.cancel()
             self._unmute_task = None
         self._muted = True
 
     def stop_speaking(self) -> None:
-        print("Stop speaking")
         if self._unmute_task:
             self._unmute_task.cancel()
         loop = self.get_event_loop()
@@ -185,7 +174,6 @@ class AssistantSpeechGate(FrameProcessor):
         await super().cleanup()
 
     async def process_frame(self, frame, direction: FrameDirection):  # type: ignore[override]
-        print("Processing frame:", frame, "Direction:", direction)
         await super().process_frame(frame, direction)
         if direction == FrameDirection.DOWNSTREAM and self._muted and isinstance(frame, AudioRawFrame):
             return
@@ -196,6 +184,8 @@ class PipelineComponents:
     pipeline: Pipeline
     task: PipelineTask
     runner: PipelineRunner
+    inbox_watcher: InboxWatcher
+    params_watcher: ParamsWatcher
 
 
 class VoicePipelineController:
@@ -207,14 +197,18 @@ class VoicePipelineController:
         event_logger: EventLogger,
         metrics: MetricsTracker,
         *,
-        dialogue_path: Path,
+        actions_path: Path,
+        inbox_path: Path,
+        params_path: Path,
     ):
         self._config_manager = config_manager
         self._session_paths = session_paths
         self._history = history
         self._event_logger = event_logger
         self._metrics = metrics
-        self._dialogue_path = dialogue_path
+        self._actions_path = actions_path
+        self._inbox_path = inbox_path
+        self._params_path = params_path
         self._loop = asyncio.get_event_loop()
         self._inbox_buffer: list[str] = []
         self._inbox_buffer_lock = threading.Lock()
@@ -226,24 +220,30 @@ class VoicePipelineController:
         self._speech_gate: Optional[AssistantSpeechGate] = None
         self._user_aggregator: Optional[UserAggregator] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
-        self._personas = [
-            Persona("Door", DOOR_SYSTEM),
-            Persona("Uncle", DRUNK_SYSTEM)
-        ]
-        self._current_persona_index = 0
 
+        self._current_speaker = "persona1"
+        self._dialogue_file = Path("runtime/dialogue.txt")
+        self._full_memory = ""
+
+    # Persona 1
     async def _on_user_message(self, text: str) -> None:
-        print("user message received:", text)
         if self._components:
             self._components.params_watcher.drain_pending()
         self._history.add("user", text)
         if "turn_start" not in self._metrics.marks:
             self._metrics.mark("turn_start")
 
+
+    # Persona 2
     async def _on_assistant_message(self, text: str) -> None:
         self._history.add("assistant", text, replace_last=True)
-        with open(self._dialogue_path, "a", encoding="utf-8") as f:
-            f.write(f"{persona.name}: {next_output}\n")
+
+        # Get response from Persona 2 and append to dialogue.txt
+        with self._dialogue_file.open("a", encoding="utf8") as f:
+            f.write(f"{self._current_speaker.upper()}: {text}\n")
+
+        # Trigger next round of conversation
+        await self._trigger_next_roleplay_turn(text)
 
     async def _on_assistant_partial(self, text: str) -> None:
         self._history.add_partial("assistant", text)
@@ -254,7 +254,7 @@ class VoicePipelineController:
             raise RuntimeError("GOOGLE_API_KEY and DEEPGRAM_API_KEY must be set.")
 
         transport_params = LocalAudioTransportParams(
-            audio_in_enabled=False,
+            audio_in_enabled=True,
             audio_in_sample_rate=16000,
             audio_out_enabled=True,
             audio_out_sample_rate=config.audio.output_sample_rate or config.tts.sample_rate,
@@ -263,7 +263,7 @@ class VoicePipelineController:
         )
         self._transport = LocalAudioTransport(transport_params)
         
-        #self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
+        self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
         self._speech_gate = AssistantSpeechGate()
@@ -286,14 +286,19 @@ class VoicePipelineController:
             on_message=self._on_assistant_message,
             on_partial=self._on_assistant_partial,
         )
-        
+
         processors = [
+            self._transport.input(),
+            self._speech_gate,
+            self._stt_service,
+            STTStandaloneIFilter(event_logger=self._event_logger),
+            self._user_aggregator,
             self._llm_service,
             self._assistant_aggregator,
+            ActionExtractorFilter(self._actions_path, self._event_logger),
             self._tts_service,
             self._transport.output(),
         ]
-
         return Pipeline(processors)
 
     def _install_event_hooks(self, task: PipelineTask) -> None:
@@ -361,80 +366,19 @@ class VoicePipelineController:
         if text:
             await self._inject_user_turn(text)
 
-    # async def _inject_user_text(self, text: str) -> None:
-    #     if not self._components:
-    #         return
-    #     timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    #     frame = TranscriptionFrame(text=text, user_id="inbox", timestamp=timestamp)
-    #     await self._components.task.queue_frame(frame)
-
-    # # This will most likely be removed
-    # async def _inject_user_turn(self, text: str) -> None:
-    #     if not self._components:
-    #         return
-    #     await self._components.task.queue_frame(UserStartedSpeakingFrame(emulated=True))
-    #     await self._inject_user_text(text)
-    #     await self._components.task.queue_frame(UserStoppedSpeakingFrame(emulated=True))
-        
-    async def _inject_persona_turn(self, persona: Persona, text: str) -> None:
-        """Simulate a persona speaking to the other."""
+    async def _inject_user_text(self, text: str) -> None:
         if not self._components:
             return
-        
-        # Start turn
-        await self._components.task.queue_frame(UserStartedSpeakingFrame(emulated=True))
-
-        # Add persona text
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        frame = TranscriptionFrame(text=text, user_id=persona.name, timestamp=timestamp)
-        print("Injecting frame:", frame)
+        frame = TranscriptionFrame(text=text, user_id="inbox", timestamp=timestamp)
         await self._components.task.queue_frame(frame)
 
-        # End turn
+    async def _inject_user_turn(self, text: str) -> None:
+        if not self._components:
+            return
+        await self._components.task.queue_frame(UserStartedSpeakingFrame(emulated=True))
+        await self._inject_user_text(text)
         await self._components.task.queue_frame(UserStoppedSpeakingFrame(emulated=True))
-        
-        
-    def _set_persona_prompt(self, persona: Persona) -> None:
-        if self._llm_service:
-            setattr(self._llm_service, "_system_instruction", persona.system_prompt)
-        if self._assistant_aggregator:
-            context = getattr(self._assistant_aggregator, "context", None)
-            if context and hasattr(context, "system_message"):
-                context.system_message = persona.system_prompt
-        if self._user_aggregator:
-            context = getattr(self._user_aggregator, "context", None)
-            if context and hasattr(context, "system_message"):
-                context.system_message = persona.system_prompt
-                
-    async def run_persona_dialogue(self, initial_line: str, max_turns: int = 10, delay: float = 1.0):
-        """Run a self-playing dialogue between the two personas."""
-        next_input = initial_line
-        print(f"Starting dialogue with initial line: {next_input}")
-
-        for _ in range(max_turns):
-            persona = self._personas[self._current_persona_index]
-            self._set_persona_prompt(persona)
-
-            # Prepare a future to wait for the assistant output
-            self._assistant_aggregator._next_message_future = asyncio.get_event_loop().create_future()
-            
-            # Inject the persona's turn into the pipeline
-            await self._inject_persona_turn(persona, next_input)
-
-            # Wait for the assistant aggregator to generate output
-            await asyncio.sleep(delay)
-
-            # Wait for the assistant to produce output
-            next_output = await self._assistant_aggregator._next_message_future
-            if not next_output:
-                break
-
-            # Log/output as needed
-            print(f"{persona.name} says: {next_output}")
-
-            # Alternate persona
-            self._current_persona_index = (self._current_persona_index + 1) % len(self._personas)
-            next_input = next_output
 
     async def _interrupt_assistant_if_needed(self) -> None:
         if not self._assistant_aggregator:
@@ -512,12 +456,36 @@ class VoicePipelineController:
         runner = PipelineRunner()
         self._install_event_hooks(task)
 
+        inbox_watcher = InboxWatcher(self._inbox_path, self._inbox_callback, event_logger=self._event_logger)
+        params_watcher = ParamsWatcher(
+            self._params_path,
+            self._config_manager,
+            self._history,
+            apply_callback=self._apply_param_updates,
+            event_logger=self._event_logger,
+        )
         self._components = PipelineComponents(
             pipeline=pipeline,
             task=task,
             runner=runner,
+            inbox_watcher=inbox_watcher,
+            params_watcher=params_watcher,
         )
+
+        self._components.inbox_watcher.start()
+        self._components.params_watcher.start()
         await asyncio.sleep(0)
+        self._components.params_watcher.drain_pending()
+
+        # Inject the conversation starter
+        await self._inject_user_turn(PERSONA_1_CONVERSATION_STARTER)
+
+        # Save the line into the dialogue file
+        with self._dialogue_file.open("a", encoding="utf8") as f:
+            f.write(f"{self._current_speaker.upper()}: {PERSONA_1_CONVERSATION_STARTER}\n")
+
+        # Switch speakers
+        self._current_speaker = "persona2"
 
         await runner.run(task)
 
@@ -525,6 +493,33 @@ class VoicePipelineController:
         if not self._components:
             return
         await self._components.task.stop_when_done()
+        self._components.inbox_watcher.stop()
+        self._components.params_watcher.stop()
+
+    async def _trigger_next_roleplay_turn(self, last_reply: str):
+        # Swap speaker
+        if self._current_speaker == "persona2":
+            self._current_speaker = "persona1"
+            system_prompt = PERSONA_1
+        else:
+            self._current_speaker = "persona2"
+            system_prompt = PERSONA_2
+
+        try:
+            if self._dialogue_file.exists():
+                with self._dialogue_file.open("r", encoding="utf8") as f:
+                    self._full_memory = f.read()
+            else:
+                self._full_memory = ""
+        except Exception:
+            self._full_memory = ""
+
+        # Construct persona-specific input
+        persona_input = f"System:\n{system_prompt}\n\nThis is the history of the conversation, take account of it when formulating your answer:\n{self._full_memory}\n\nReply only to the last line of your conversation partner. Stay in character! Your turn:"
+
+        # Inject the next speaking turn
+        await self._inject_user_turn(persona_input)
+
 
 
 async def run_voice_pipeline(session_name: Optional[str] = None) -> None:
@@ -537,8 +532,6 @@ async def run_voice_pipeline(session_name: Optional[str] = None) -> None:
         session_paths.transcript,
         clean_transcript_path=session_paths.llm_transcript,
     )
-    
-    # nu cred ca mai trebuie asta aici, pentru ca nu mai exista un system prompt
     history.set_system_message(config_manager.config.llm.system_prompt)
 
     controller = VoicePipelineController(
@@ -547,19 +540,9 @@ async def run_voice_pipeline(session_name: Optional[str] = None) -> None:
         history,
         event_logger,
         metrics,
-        dialogue_path=Path("runtime/dialogue.txt"),
+        actions_path=Path("runtime/actions.txt"),
+        inbox_path=Path("runtime/inbox.txt"),
+        params_path=Path("runtime/params_inbox.ndjson"),
     )
-    
-    # Start pipeline in the background
-    pipeline_task = asyncio.create_task(controller.start())
 
-    # Wait a moment for initialization
-    await asyncio.sleep(0.1)
-
-    # Inject the first persona turn
-    initial_line = "Hello there!"  # Persona 1 starts
-    await controller.run_persona_dialogue(initial_line, max_turns=20, delay=1.0)
-
-    # Stop the pipeline cleanly
-    await controller.stop()
-    await pipeline_task
+    await controller.start()
