@@ -18,6 +18,7 @@ from projects.utils import (
     terminate_processes,
 )
 
+PIPELINE = "ollama"
 
 # Persona script.
 SYSTEM_PROMPT = (
@@ -33,8 +34,8 @@ SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + PROMPT_APPEND
 # Default runtime settings; tweak these to match your hardware and providers.
 RUNTIME_CONFIG = {
     "audio": {
-        "input_device_index": 1,
-        "output_device_index": 2,
+        "input_device_index": 2,
+        "output_device_index": 3,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
     },
@@ -46,7 +47,7 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "deepseek-r1:1.5b",
+        "model": "deepseek-r1:1.5b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
@@ -65,9 +66,9 @@ def main() -> None:
     # Load our example configuration before launching any helper processes.
     apply_runtime_config_overrides(RUNTIME_CONFIG)
 
-    # Start the CLI plus helper scripts; the terminals make their logs easy to follow.
+    # Start the CLI.
     processes = [
-        launch_module("app_ollama.cli"),
+        launch_module("app.cli", "--pipeline", PIPELINE),
     ]
 
     try:
