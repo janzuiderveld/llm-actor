@@ -10,7 +10,7 @@ authors = [{name = "Jan Zuiderveld, Grigore Burloiu, Lorena Cocora"}]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "pipecat-ai[deepgram,google,local,silero,local-smart-turn-v3]",
+    "pipecat-ai[deepgram,google,groq,local,silero,local-smart-turn-v3]",
     "python-dotenv",
     "pydantic",
     "sounddevice>=0.4",

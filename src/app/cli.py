@@ -15,6 +15,8 @@ def main(session_name: Optional[str] = typer.Option(None, help="Optional session
     try:
         if pipeline == "ollama":
             from .pipeline_ollama import run_voice_pipeline
+        elif pipeline == "groq":
+            from .pipeline_groq import run_voice_pipeline
         else:
             from .pipeline_google import run_voice_pipeline
         asyncio.run(run_voice_pipeline(session_name=session_name))

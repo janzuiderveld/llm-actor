@@ -7,6 +7,7 @@ from pipecat.services.google.llm import (
 )
 
 from pipecat.services.ollama.llm import OLLamaLLMService
+from pipecat.services.groq.llm import GroqLLMService
 
 from app.config import RuntimeConfig
 
@@ -34,6 +35,20 @@ def build_ollama_llm(config: RuntimeConfig, base_url: str = "http://localhost:11
         params=params,
         system_instruction=config.llm.system_prompt,
     )
+
+def build_groq_llm(config: RuntimeConfig, api_key: str) -> GroqLLMService:
+    params = GroqLLMService.InputParams(
+        max_tokens=config.llm.max_tokens,
+        temperature=config.llm.temperature,
+    )
+    return GroqLLMService(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+        model=config.llm.model,
+        params=params,
+        system_instruction=config.llm.system_prompt,
+    )
+
 
 
 def create_google_context(llm_service: GoogleLLMService, history_messages: list[dict]) -> GoogleContextAggregatorPair:

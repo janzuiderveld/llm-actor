@@ -18,8 +18,6 @@ from projects.utils import (
     terminate_processes,
 )
 
-PIPELINE = "ollama"
-
 # Persona script.
 SYSTEM_PROMPT = (
     "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>."
@@ -47,7 +45,7 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "deepseek-r1:1.5b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
+        "model": "openai/gpt-oss-20b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
@@ -58,6 +56,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
+PIPELINE = "groq"
 
 
 def main() -> None:
