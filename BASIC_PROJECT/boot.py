@@ -36,6 +36,7 @@ RUNTIME_CONFIG = {
         "output_device_index": 3,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
+        "aec": "mute_while_tts", # options: "off", "mute_while_tts", "pyaec"
     },
     "stt": {
         "model": "deepgram-flux",
@@ -45,7 +46,7 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "openai/gpt-oss-20b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
+        "model": "gemini-2.5-flash", # "openai/gpt-oss-20b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
@@ -56,7 +57,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
-PIPELINE = "groq"
+PIPELINE = "google"
 
 
 def main() -> None:

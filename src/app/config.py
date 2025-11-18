@@ -107,6 +107,7 @@ class AudioConfig:
     output_device_index: Optional[int] = None
     output_sample_rate: Optional[int] = None
     auto_select_devices: bool = True
+    aec: str = "mute_while_tts"  # options: "off", "mute_while_tts", "pyaec"
 
 
 @dataclass
