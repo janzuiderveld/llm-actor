@@ -11,7 +11,6 @@ from typing import Awaitable, Callable, Optional
 from pyaec import Aec
 import numpy as np
 from scipy.signal import resample_poly
-
 from collections import deque
 
 from pipecat.frames.frames import (
@@ -20,6 +19,7 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMTextFrame,
     InputAudioRawFrame,
+    STTMuteFrame,
     TTSAudioRawFrame,
     TTSStartedFrame,
     TTSStoppedFrame,
@@ -173,6 +173,7 @@ class PyAECProcessor(FrameProcessor):
         self._post_tts_timeout = 100  # number of frames to keep AEC after TTS ends
         self._post_tts_counter = 0
         self._mute_while_tts = mute_while_tts
+        self._muted = False
         
     def add_tts_audio(self, tts_audio: np.ndarray):
         """Feed TTS playback audio into the AEC buffer (downsampled to 16kHz mono)."""
@@ -202,8 +203,12 @@ class PyAECProcessor(FrameProcessor):
 
             if len(tts_audio) > 0:
                 if self._mute_while_tts:
-                    # Mute mic audio while TTS is playing
-                    cleaned = np.zeros_like(mic_audio)
+                    if not self._muted:
+                        # Mute mic audio while TTS is playing
+                        cleaned = np.zeros_like(mic_audio)
+                        # emit mute frame upstream
+                        await self.push_frame(STTMuteFrame(True), FrameDirection.DOWNSTREAM)
+                        self._muted = True
                 else:
                     # print("========== AEC:", len(mic_audio), "mic samples;", len(tts_audio), "TTS samples")
                     # print dots to indicate AEC activity
@@ -228,7 +233,11 @@ class PyAECProcessor(FrameProcessor):
                                 break
 
                         # print("Done after", i + 1, "chunks; max RMS:", int(max_rms))
-
+            else: # no TTS audio
+                if self._mute_while_tts and self._muted:
+                    # emit unmute frame upstream
+                    await self.push_frame(STTMuteFrame(False), FrameDirection.DOWNSTREAM)
+                    self._muted = False
             cleaned = np.clip(cleaned, -32768, 32767).astype(np.int16)
             frame.audio = cleaned.tobytes()
 
@@ -244,6 +253,7 @@ class PushUpTTSFrameProcessor(FrameProcessor):
         if isinstance(frame, TTSStartedFrame):
             # print("TTS STARTED")
             self._aec_ref._post_tts_counter = self._aec_ref._post_tts_timeout + 1
+            await self.push_frame(STTMuteFrame(True), FrameDirection.UPSTREAM)
         #     await self.push_frame(frame, FrameDirection.UPSTREAM)
         if isinstance(frame, TTSStoppedFrame) or isinstance(frame, UserStartedSpeakingFrame):
             # print("TTS STOPPED")
@@ -543,7 +553,7 @@ class VoicePipelineController:
         pipeline = self._build_pipeline(config)
 
         params = PipelineParams(
-            allow_interruptions=True,
+            allow_interruptions=(config.audio.aec != "mute_while_tts"),
             audio_in_sample_rate=16000,
             audio_out_sample_rate=config.tts.sample_rate,
             enable_metrics=True,
