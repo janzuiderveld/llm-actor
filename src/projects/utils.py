@@ -183,6 +183,7 @@ def python_module_args(module: str, *extra: str) -> list[str]:
 def launch_module(
     module: str,
     *extra: str,
+    pipeline: Optional[str] = "google",
     cwd: Optional[Path] = None,
     new_session: bool = True,
     env: Optional[MutableMapping[str, str]] = None,

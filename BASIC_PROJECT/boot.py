@@ -18,7 +18,6 @@ from projects.utils import (
     terminate_processes,
 )
 
-
 # Persona script.
 SYSTEM_PROMPT = (
     "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>."
@@ -46,7 +45,7 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "gemini-2.5-flash",
+        "model": "openai/gpt-oss-20b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
@@ -57,6 +56,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
+PIPELINE = "groq"
 
 
 def main() -> None:
@@ -65,13 +65,9 @@ def main() -> None:
     # Load our example configuration before launching any helper processes.
     apply_runtime_config_overrides(RUNTIME_CONFIG)
 
-    # Start the CLI plus helper scripts; the terminals make their logs easy to follow.
+    # Start the CLI.
     processes = [
-        launch_module("app.cli"),
-        # launch_module_in_terminal(
-        #     "BASIC_PROJECT.inbox_writer",
-        #     title="Inbox Writer",
-        # ),
+        launch_module("app.cli", "--pipeline", PIPELINE),
     ]
 
     try:
