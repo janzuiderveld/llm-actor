@@ -242,11 +242,11 @@ class PushUpTTSFrameProcessor(FrameProcessor):
     async def process_frame(self, frame, direction: FrameDirection): 
         await super().process_frame(frame, direction)
         if isinstance(frame, TTSStartedFrame):
-            print("TTS STARTED")
+            # print("TTS STARTED")
             self._aec_ref._post_tts_counter = self._aec_ref._post_tts_timeout + 1
         #     await self.push_frame(frame, FrameDirection.UPSTREAM)
         if isinstance(frame, TTSStoppedFrame) or isinstance(frame, UserStartedSpeakingFrame):
-            print("TTS STOPPED")
+            # print("TTS STOPPED")
             self._aec_ref._post_tts_counter = 0
             # await self.push_frame(frame, FrameDirection.UPSTREAM)
         if direction == FrameDirection.DOWNSTREAM and isinstance(frame, TTSAudioRawFrame):
