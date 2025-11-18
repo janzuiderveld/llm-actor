@@ -163,7 +163,7 @@ class AssistantSpeechGate(FrameProcessor):
         await self.push_frame(frame, direction)
 
 class PyAECProcessor(FrameProcessor):
-    def __init__(self, frame_size: int = 160, filter_length_secs: float = 0.4, sample_rate: int = 16000, **kwargs):
+    def __init__(self, frame_size: int = 160, filter_length_secs: float = 0.4, sample_rate: int = 16000, mute_while_tts: bool = False, **kwargs):
         super().__init__(**kwargs)
         filter_length = int(sample_rate * filter_length_secs) # 0.4s
         self._aec = Aec(frame_size, filter_length, sample_rate, True)
@@ -172,6 +172,7 @@ class PyAECProcessor(FrameProcessor):
         self._playback_buffer = deque(maxlen=self._tts_sr // 3)
         self._post_tts_timeout = 100  # number of frames to keep AEC after TTS ends
         self._post_tts_counter = 0
+        self._mute_while_tts = mute_while_tts
         
     def add_tts_audio(self, tts_audio: np.ndarray):
         """Feed TTS playback audio into the AEC buffer (downsampled to 16kHz mono)."""
@@ -191,7 +192,7 @@ class PyAECProcessor(FrameProcessor):
             if self._post_tts_counter == self._post_tts_timeout:
                 self._playback_buffer.clear()
                 self._post_tts_counter += 1
-                print("AEC: cleared playback buffer after TTS end")
+                # print("AEC: cleared playback buffer after TTS end")
             elif self._post_tts_counter < self._post_tts_timeout:
                 self._post_tts_counter += 1
 
@@ -200,29 +201,33 @@ class PyAECProcessor(FrameProcessor):
             tts_audio = np.array(self._playback_buffer, dtype=np.int16)
 
             if len(tts_audio) > 0:
-                # print("========== AEC:", len(mic_audio), "mic samples;", len(tts_audio), "TTS samples")
-                # print dots to indicate AEC activity
-                # print(".", end="", flush=True)
-                if len(tts_audio) < len(mic_audio):
-                    tts_audio = np.pad(tts_audio, (0, len(mic_audio) - len(tts_audio)))
-                    cleaned = self._aec.cancel_echo(mic_audio, tts_audio)
-                if len(tts_audio) >= len(mic_audio):
-                    # split buffer into chunks of mic_audio length and clean the mic against each
-                    num_chunks = len(tts_audio) // len(mic_audio)
-                    max_rms = 1000
-                    for i in range(num_chunks):
-                        tts_chunk = tts_audio[i * len(mic_audio) : (i + 1) * len(mic_audio)]
-                        cleaned = np.array(self._aec.cancel_echo(cleaned, tts_chunk), dtype=np.int16)
-                        rms = np.sqrt(np.mean(cleaned.astype(np.float32)**2))
-                        if rms > max_rms:
-                            max_rms = rms
-                        if i > 3 and rms < max_rms * 0.3:
-                            # print(f"AEC: early exit after {i+1} chunks")
-                            # print(i, end="", flush=True)
-                            # Early exit if signal is sufficiently cleaned
-                            break
+                if self._mute_while_tts:
+                    # Mute mic audio while TTS is playing
+                    cleaned = np.zeros_like(mic_audio)
+                else:
+                    # print("========== AEC:", len(mic_audio), "mic samples;", len(tts_audio), "TTS samples")
+                    # print dots to indicate AEC activity
+                    # print(".", end="", flush=True)
+                    if len(tts_audio) < len(mic_audio):
+                        tts_audio = np.pad(tts_audio, (0, len(mic_audio) - len(tts_audio)))
+                        cleaned = self._aec.cancel_echo(mic_audio, tts_audio)
+                    if len(tts_audio) >= len(mic_audio):
+                        # split buffer into chunks of mic_audio length and clean the mic against each
+                        num_chunks = len(tts_audio) // len(mic_audio)
+                        max_rms = 1000
+                        for i in range(num_chunks):
+                            tts_chunk = tts_audio[i * len(mic_audio) : (i + 1) * len(mic_audio)]
+                            cleaned = np.array(self._aec.cancel_echo(cleaned, tts_chunk), dtype=np.int16)
+                            rms = np.sqrt(np.mean(cleaned.astype(np.float32)**2))
+                            if rms > max_rms:
+                                max_rms = rms
+                            if i > 3 and rms < max_rms * 0.3:
+                                # print(f"AEC: early exit after {i+1} chunks")
+                                # print(i, end="", flush=True)
+                                # Early exit if signal is sufficiently cleaned
+                                break
 
-                    # print("Done after", i + 1, "chunks; max RMS:", int(max_rms))
+                        # print("Done after", i + 1, "chunks; max RMS:", int(max_rms))
 
             cleaned = np.clip(cleaned, -32768, 32767).astype(np.int16)
             frame.audio = cleaned.tobytes()
@@ -237,11 +242,11 @@ class PushUpTTSFrameProcessor(FrameProcessor):
     async def process_frame(self, frame, direction: FrameDirection): 
         await super().process_frame(frame, direction)
         if isinstance(frame, TTSStartedFrame):
-            # print("TTS STARTED")
+            print("TTS STARTED")
             self._aec_ref._post_tts_counter = self._aec_ref._post_tts_timeout + 1
         #     await self.push_frame(frame, FrameDirection.UPSTREAM)
         if isinstance(frame, TTSStoppedFrame) or isinstance(frame, UserStartedSpeakingFrame):
-            # print("TTS STOPPED")
+            print("TTS STOPPED")
             self._aec_ref._post_tts_counter = 0
             # await self.push_frame(frame, FrameDirection.UPSTREAM)
         if direction == FrameDirection.DOWNSTREAM and isinstance(frame, TTSAudioRawFrame):
@@ -337,7 +342,7 @@ class VoicePipelineController:
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_google_llm(config, keys["google"])
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
-        self._aec_proc = PyAECProcessor()
+        self._aec_proc = PyAECProcessor(mute_while_tts=(config.audio.aec == "mute_while_tts"))
         self._push_up_tts_proc = PushUpTTSFrameProcessor()
         self._speech_gate = AssistantSpeechGate()
 
@@ -360,21 +365,20 @@ class VoicePipelineController:
             on_partial=self._on_assistant_partial,
         )
 
-        if not config.audio.aec_enabled:
-            # replace real AEC with a no-op shim that forwards frames but ignores TTS feeding
-            class _NoopAEC(FrameProcessor):
+        if config.audio.aec == "off":
+            # replace AEC with no-op
+            class _NoAEC(FrameProcessor):
                 def __init__(self, **kwargs):
                     super().__init__(**kwargs)
                     self._post_tts_counter = 0
                     self._post_tts_timeout = -1
                 async def process_frame(self, frame, direction: FrameDirection):
                     await super().process_frame(frame, direction)
-                    # do nothing
                     await self.push_frame(frame, direction)
                 def add_tts_audio(self, tts_audio: np.ndarray):
                     # no-op when AEC is disabled
                     return
-            self._aec_proc = _NoopAEC()
+            self._aec_proc = _NoAEC()
         
         self._push_up_tts_proc._aec_ref = self._aec_proc
         processors = [
