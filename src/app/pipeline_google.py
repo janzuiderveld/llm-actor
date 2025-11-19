@@ -598,6 +598,9 @@ class VoicePipelineController:
         self._components.params_watcher.drain_pending()
 
         if config.llm.mode == "2personas":
+            persona_voice = config.llm.persona1["voice"]
+            self._tts_service.set_voice(persona_voice)
+
             # Inject the conversation starter
             await self._inject_user_turn(config.llm.persona1["opening"])
 
@@ -624,9 +627,14 @@ class VoicePipelineController:
         if self._current_speaker == "persona2":
             self._current_speaker = "persona1"
             system_prompt = config.llm.persona1["prompt"]
+            persona_voice = config.llm.persona1["voice"]
         else:
             self._current_speaker = "persona2"
             system_prompt = config.llm.persona2["prompt"]
+            persona_voice = config.llm.persona2["voice"]
+
+        # 🔊 Switch TTS voice based on active persona
+        self._tts_service.set_voice(persona_voice)
 
         try:
             if self._dialogue_file.exists():

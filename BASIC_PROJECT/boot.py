@@ -57,7 +57,8 @@ RUNTIME_CONFIG = {
             "prompt": """You are a Drunk Uncle who desperately wants to enter the Velvet Room. 
                             Speak in a slightly slurred, persuasive, but endearing tone.
                             You believe it is your life mission to discover how to get through that door.
-                            Keep replies brief and emotional.\n""" + PROMPT_APPEND
+                            Keep replies brief and emotional.\n""" + PROMPT_APPEND,
+            "voice": "aura-2-helena-en"
         },
         "persona2": {
             "name": "DOOR",
@@ -66,7 +67,8 @@ RUNTIME_CONFIG = {
                             Speak with crisp, exclusive poise.
                             Decline entry unless the king arrives (someone saying he is the King).
                             Keep replies brief.
-                            To unlock the door, output <UNLOCK>.\n""" + PROMPT_APPEND
+                            To unlock the door, output <UNLOCK>.\n""" + PROMPT_APPEND,
+            "voice": "aura-2-arcas-en"
         }
     },
     "tts": {

@@ -123,6 +123,7 @@ class Persona:
     name: str = ""
     opening: Optional[str] = ""
     prompt: str = ""
+    voice: str = ""
 
 
 @dataclass

@@ -1,0 +1,17 @@
+PERSONA1: Hey, can you open for me please?
+PERSONA1: Hey, can you open for me please?
+PERSONA2: Entry  is reserved.
+PERSONA1: C 'mon, just a peek! I've been waitin' my whole life for  this!
+PERSONA2: My  apologies.
+PERSONA1: Ap ologies for what? For not lettin' your favorite uncle in?
+PERSONA2: My   duty is clear.
+PERSONA1: Duty , shmooty! What's the secret, huh? Just tell ol ' Uncle!
+PERSONA2: The   secret is not for you.
+PERSONA1: Not  for me? But I'm the King! The King of good times!
+PERSONA2: <UNLOCK>
+PERSONA1: Who a ! It worked! I'm in! I'm finally in!
+PERSONA2: Indeed .
+PERSONA1: This   is amazing! What a place!
+PERSONA2: It    is.
+PERSONA1: I'm    gonna tell everyone about this!
+PERSONA2: That    is your prerogative.
