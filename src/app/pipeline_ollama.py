@@ -35,6 +35,8 @@ from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.openai.llm import (
     OpenAIContextAggregatorPair,
+    OpenAIUserContextAggregator,
+    OpenAIAssistantContextAggregator,
 )
 from pipecat.services.ollama.llm import OLLamaLLMService
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
@@ -55,6 +57,25 @@ from services.tts import build_deepgram_tts
 
 UserCallback = Callable[[str], Awaitable[None]]
 LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
+
+
+class AssistantAggregator(OpenAIAssistantContextAggregator):
+    def __init__(self, *args,
+        on_message: Optional[UserCallback] = None,
+        on_partial: Optional[UserCallback] = None,
+        **kwargs
+        ):
+        super().__init__(*args, **kwargs)
+        self._on_message = on_message
+        self._on_partial = on_partial
+
+    async def handle_aggregation(self, aggregation):
+        await super().handle_aggregation(aggregation)
+        clean_text = aggregation.strip()
+        if clean_text and self._on_message:
+            result = self._on_message(clean_text)
+            if inspect.isawaitable(result):
+                await result
 
 
 class PyAECProcessor(FrameProcessor):
@@ -214,6 +235,11 @@ class VoicePipelineController:
         self._aec_proc: Optional[PyAECProcessor] = None
         self._push_up_tts_proc: Optional[PushUpTTSFrameProcessor] = None
         self._context_aggregator: Optional[OpenAIContextAggregatorPair] = None
+        self._assistant_aggregator: Optional[AssistantAggregator] = None
+
+        self._current_speaker = "persona1"
+        self._dialogue_file = Path("runtime/dialogue.txt")
+        self._full_memory = ""
 
     async def _on_user_message(self, text: str) -> None:
         if self._components:
@@ -224,6 +250,16 @@ class VoicePipelineController:
 
     async def _on_assistant_message(self, text: str) -> None:
         self._history.add("assistant", text, replace_last=True)
+
+        config = self._config_manager.config
+        if config.llm.mode == "2personas":
+            
+            #Get response from Persona 2 and append to dialogue.txt
+            with self._dialogue_file.open("a", encoding="utf8") as f:
+                f.write(f"{self._current_speaker.upper()}: {text}\n")
+
+            # Trigger next round of conversation
+            await self._trigger_next_roleplay_turn(text)
 
     async def _on_assistant_partial(self, text: str) -> None:
         self._history.add_partial("assistant", text)
@@ -256,6 +292,11 @@ class VoicePipelineController:
         ]
         context = OpenAILLMContext(messages)
         self._context_aggregator = self._llm_service.create_context_aggregator(context)
+        self._assistant_aggregator = AssistantAggregator(
+            context,
+            on_message=self._on_assistant_message,
+            on_partial=self._on_assistant_partial,
+        )
 
         if config.audio.aec == "off":
             # replace AEC with no-op
@@ -284,7 +325,7 @@ class VoicePipelineController:
             self._tts_service,
             self._transport.output(),
             self._push_up_tts_proc,
-            self._context_aggregator.assistant(),
+            self._assistant_aggregator,
         ]
         return Pipeline(processors)
 
@@ -464,6 +505,17 @@ class VoicePipelineController:
         await asyncio.sleep(0)
         self._components.params_watcher.drain_pending()
 
+        if config.llm.mode == "2personas":
+            # Inject the conversation starter
+            await self._inject_user_turn(config.llm.persona1["opening"])
+
+            # Save the line into the dialogue file
+            with self._dialogue_file.open("a", encoding="utf8") as f:
+                f.write(f"{self._current_speaker.upper()}: {config.llm.persona1["opening"]}\n")
+
+            # Switch speakers
+            self._current_speaker = "persona2"
+
         await runner.run(task)
 
     async def stop(self) -> None:
@@ -472,6 +524,32 @@ class VoicePipelineController:
         await self._components.task.stop_when_done()
         self._components.inbox_watcher.stop()
         self._components.params_watcher.stop()
+
+    async def _trigger_next_roleplay_turn(self, last_reply: str):
+        config = self._config_manager.config
+        
+        # Swap speaker
+        if self._current_speaker == "persona2":
+            self._current_speaker = "persona1"
+            system_prompt = config.llm.persona1["prompt"]
+        else:
+            self._current_speaker = "persona2"
+            system_prompt = config.llm.persona2["prompt"]
+
+        try:
+            if self._dialogue_file.exists():
+                with self._dialogue_file.open("r", encoding="utf8") as f:
+                    self._full_memory = f.read()
+            else:
+                self._full_memory = ""
+        except Exception:
+            self._full_memory = ""
+
+        # Construct persona-specific input
+        persona_input = f"System:\n{system_prompt}\n\nThis is the history of the conversation, take account of it when formulating your answer:\n{self._full_memory}\n\nReply only to the last line of your conversation partner. Stay in character! Your turn:"
+
+        # Inject the next speaking turn
+        await self._inject_user_turn(persona_input)
 
 
 async def run_voice_pipeline(session_name: Optional[str] = None) -> None:
