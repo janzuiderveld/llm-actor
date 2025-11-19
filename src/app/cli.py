@@ -5,8 +5,6 @@ from typing import Optional
 
 import typer
 
-from .pipeline_2_personas import run_voice_pipeline
-
 app = typer.Typer(add_completion=False)
 
 

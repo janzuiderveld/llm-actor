@@ -46,10 +46,28 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "openai/gpt-oss-20b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
+        "model": "openai/gpt-oss-20b", # options: "gemini-2.5-flash", "openai/gpt-oss-20b", "deepseek-r1:1.5b",
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
+        "mode": "2personas", #options: "1to1", "2personas", "narrator"
+        "persona1": {
+            "name": "UNCLE",
+            "opening": "Hey, can you open for me please?",
+            "prompt": """You are a Drunk Uncle who desperately wants to enter the Velvet Room. 
+                            Speak in a slightly slurred, persuasive, but endearing tone.
+                            You believe it is your life mission to discover how to get through that door.
+                            Keep replies brief and emotional.\n""" + PROMPT_APPEND
+        },
+        "persona2": {
+            "name": "DOOR",
+            "opening": "",
+            "prompt": """You are the Door that guards the Velvet Room.
+                            Speak with crisp, exclusive poise.
+                            Decline entry unless the king arrives (someone saying he is the King).
+                            Keep replies brief.
+                            To unlock the door, output <UNLOCK>.\n""" + PROMPT_APPEND
+        }
     },
     "tts": {
         "voice": "aura-2-thalia-en",

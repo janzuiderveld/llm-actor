@@ -18,18 +18,6 @@ from projects.utils import (
     terminate_processes,
 )
 
-
-# # Persona script.
-# SYSTEM_PROMPT = (
-#     "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>."
-# )
-
-# # Shared reminder appended to prompt so the voice stays TTS-friendly.
-# PROMPT_APPEND = "Only output text to be synthesized by a TTS system, no '*' around words or emojis for example"
-
-# SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + PROMPT_APPEND
-
-
 # Default runtime settings; tweak these to match your hardware and providers.
 RUNTIME_CONFIG = {
     "audio": {
@@ -37,6 +25,7 @@ RUNTIME_CONFIG = {
         "output_device_index": 3,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
+        "aec": "mute_while_tts", # options: "off", "mute_while_tts", "pyaec"
     },
     "stt": {
         "model": "deepgram-flux",
@@ -46,9 +35,10 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "gemini-2.5-flash",
+        "model": "gemini-2.5-flash", # "gemini-2.5-flash", "openai/gpt-oss-20b", "deepseek-r1:1.5b",
         "temperature": 0.2,
         "max_tokens": 1024,
+        "mode": "2personas", #options: "1to1", "2personas", "narrator"
     },
     "tts": {
         "voice": "aura-2-thalia-en",
@@ -56,6 +46,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
+PIPELINE = "google" # options: "google", "groq", "ollama"
 
 
 def main() -> None:
@@ -66,11 +57,7 @@ def main() -> None:
 
     # Start the CLI plus helper scripts; the terminals make their logs easy to follow.
     processes = [
-        launch_module("app.cli"),
-        # launch_module_in_terminal(
-        #     "BASIC_PROJECT.inbox_writer",
-        #     title="Inbox Writer",
-        # ),
+        launch_module("app.cli", "--pipeline", PIPELINE),
     ]
 
     try:
