@@ -36,6 +36,8 @@ from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.openai.llm import (
     OpenAIContextAggregatorPair,
+    OpenAIUserContextAggregator,
+    OpenAIAssistantContextAggregator,
 )
 from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
@@ -56,6 +58,25 @@ from services.tts import build_deepgram_tts
 
 UserCallback = Callable[[str], Awaitable[None]]
 LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
+
+class AssistantAggregator(OpenAIAssistantContextAggregator):
+    def __init__(self, *args,
+        on_message: Optional[UserCallback] = None,
+        on_partial: Optional[UserCallback] = None,
+        **kwargs
+        ):
+        super().__init__(*args, **kwargs)
+        self._on_message = on_message
+        self._on_partial = on_partial
+
+    async def handle_aggregation(self, aggregation):
+        await super().handle_aggregation(aggregation)
+        clean_text = aggregation.strip()
+        if clean_text and self._on_message:
+            result = self._on_message(clean_text)
+            if inspect.isawaitable(result):
+                await result
+
 
 class PyAECProcessor(FrameProcessor):
     def __init__(self, frame_size: int = 160, filter_length_secs: float = 0.4, sample_rate: int = 16000, mute_while_tts: bool = False, **kwargs):
@@ -214,6 +235,7 @@ class VoicePipelineController:
         self._aec_proc: Optional[PyAECProcessor] = None
         self._push_up_tts_proc: Optional[PushUpTTSFrameProcessor] = None
         self._context_aggregator: Optional[OpenAIContextAggregatorPair] = None
+        self._assistant_aggregator: Optional[AssistantAggregator] = None
 
     async def _on_user_message(self, text: str) -> None:
         if self._components:
@@ -256,6 +278,11 @@ class VoicePipelineController:
         ]
         context = OpenAILLMContext(messages)
         self._context_aggregator = self._llm_service.create_context_aggregator(context)
+        self._assistant_aggregator = AssistantAggregator(
+            context,
+            on_message=self._on_assistant_message,
+            on_partial=self._on_assistant_partial,
+        )
 
         if config.audio.aec == "off":
             # replace AEC with no-op
@@ -284,7 +311,8 @@ class VoicePipelineController:
             self._tts_service,
             self._transport.output(),
             self._push_up_tts_proc,
-            self._context_aggregator.assistant(),
+            # self._context_aggregator.assistant(),
+            self._assistant_aggregator,
         ]
         return Pipeline(processors)
 

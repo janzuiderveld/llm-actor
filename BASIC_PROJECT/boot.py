@@ -32,8 +32,8 @@ SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + PROMPT_APPEND
 # Default runtime settings; tweak these to match your hardware and providers.
 RUNTIME_CONFIG = {
     "audio": {
-        "input_device_index": 2,
-        "output_device_index": 3,
+        "input_device_index": 1,
+        "output_device_index": 2,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
         "aec": "mute_while_tts", # options: "off", "mute_while_tts", "pyaec"
