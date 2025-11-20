@@ -18,6 +18,11 @@ from projects.utils import (
     terminate_processes,
 )
 
+# if runtime/dialogue.txt exists, empty it to start fresh.
+dialogue_file = Path("runtime/dialogue.txt")
+if dialogue_file.exists():
+    dialogue_file.write_text("")
+
 # Persona script.
 SYSTEM_PROMPT = (
     "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>."

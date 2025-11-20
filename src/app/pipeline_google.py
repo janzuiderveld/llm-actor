@@ -283,9 +283,11 @@ class PushUpTTSFrameProcessor(FrameProcessor):
 class VoiceSwitcher(FrameProcessor):
     def __init__(self,
                  switch_voice: Optional[UserCallback] = None,
+                 trigger_next_roleplay_turn: Optional[UserCallback] = None,
                   **kwargs):
         super().__init__(**kwargs)
         self._switch_voice = switch_voice
+        self._trigger_next_roleplay_turn = trigger_next_roleplay_turn
 
     async def process_frame(self, frame, direction: FrameDirection): 
         await super().process_frame(frame, direction)
@@ -295,6 +297,11 @@ class VoiceSwitcher(FrameProcessor):
             # Switch voice based on current speaker
             if self._switch_voice:
                 await self._switch_voice()
+                await asyncio.sleep(0)  # yield to allow voice switch to take effect
+            # Trigger next roleplay turn
+            if self._trigger_next_roleplay_turn:
+                await self._trigger_next_roleplay_turn("")
+
         await self.push_frame(frame, direction)
 
 @dataclass
@@ -349,11 +356,11 @@ class VoicePipelineController:
     async def _on_user_message(self, text: str) -> None:
         if self._components:
             self._components.params_watcher.drain_pending()
-        config = self._config_manager.config
-        if config.llm.mode == "2personas":
-            await self._trigger_next_roleplay_turn(text)
-        else:
-            self._history.add("user", text)
+        # config = self._config_manager.config
+        # if config.llm.mode == "2personas":
+        #     await self._trigger_next_roleplay_turn(text)
+        # else:
+        self._history.add("user", text)
         if "turn_start" not in self._metrics.marks:
             self._metrics.mark("turn_start")
 
@@ -394,7 +401,8 @@ class VoicePipelineController:
         self._aec_proc = PyAECProcessor(mute_while_tts=(config.audio.aec == "mute_while_tts"))
         self._push_up_tts_proc = PushUpTTSFrameProcessor()
         self._voice_switcher = VoiceSwitcher(
-            switch_voice=self._switch_voice
+            switch_voice=self._switch_voice,
+            trigger_next_roleplay_turn=self._trigger_next_roleplay_turn,
         )
         self._speech_gate = AssistantSpeechGate()
 
