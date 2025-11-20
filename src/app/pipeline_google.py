@@ -244,7 +244,6 @@ class PyAECProcessor(FrameProcessor):
 
         await self.push_frame(frame, direction)
 
-
 class PushUpTTSFrameProcessor(FrameProcessor):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -293,7 +292,7 @@ class VoiceSwitcher(FrameProcessor):
         await super().process_frame(frame, direction)
         # print("VoiceSwitcher processing frame:", type(frame).__name__)
         if isinstance(frame, BotStoppedSpeakingFrame):
-            print("==== BOT STOPPED SPEAKING, switch voice =====")
+            # print("==== BOT STOPPED SPEAKING, switch voice =====")
             # Switch voice based on current speaker
             if self._switch_voice:
                 await self._switch_voice()
@@ -356,10 +355,6 @@ class VoicePipelineController:
     async def _on_user_message(self, text: str) -> None:
         if self._components:
             self._components.params_watcher.drain_pending()
-        # config = self._config_manager.config
-        # if config.llm.mode == "2personas":
-        #     await self._trigger_next_roleplay_turn(text)
-        # else:
         self._history.add("user", text)
         if "turn_start" not in self._metrics.marks:
             self._metrics.mark("turn_start")
@@ -369,13 +364,9 @@ class VoicePipelineController:
         
         config = self._config_manager.config
         if config.llm.mode == "2personas":
-            
             #Get response from Persona 2 and append to dialogue.txt
             with self._dialogue_file.open("a", encoding="utf8") as f:
                 f.write(f"{self._current_speaker.upper()}: {text}\n")
-
-            # Trigger next round of conversation
-            # await self._trigger_next_roleplay_turn(text)
 
     async def _on_assistant_partial(self, text: str) -> None:
         self._history.add_partial("assistant", text)
@@ -665,14 +656,9 @@ class VoicePipelineController:
         if self._current_speaker == "persona2":
             self._current_speaker = "persona1"
             system_prompt = config.llm.persona1["prompt"]
-            persona_voice = config.llm.persona1["voice"]
         else:
             self._current_speaker = "persona2"
             system_prompt = config.llm.persona2["prompt"]
-            persona_voice = config.llm.persona2["voice"]
-
-        # 🔊 Switch TTS voice based on active persona
-        # self._tts_service.set_voice(persona_voice)
 
         try:
             if self._dialogue_file.exists():

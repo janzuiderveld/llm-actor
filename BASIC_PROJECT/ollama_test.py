@@ -2,7 +2,7 @@
 
 from ollama import Client
 client = Client(
-  host='http://100.94.224.82:11434',
+  host='http://10.0.8.110:11434', #100.94.224.82:11434',
   headers={'Content-Type': 'application/json'}
 )
 response = client.chat(model='deepseek-r1:1.5b', messages=[

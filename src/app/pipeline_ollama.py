@@ -27,6 +27,7 @@ from pipecat.frames.frames import (
     TranscriptionFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
+    BotStoppedSpeakingFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -196,6 +197,31 @@ class PushUpTTSFrameProcessor(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+class VoiceSwitcher(FrameProcessor):
+    def __init__(self,
+                 switch_voice: Optional[UserCallback] = None,
+                 trigger_next_roleplay_turn: Optional[UserCallback] = None,
+                  **kwargs):
+        super().__init__(**kwargs)
+        self._switch_voice = switch_voice
+        self._trigger_next_roleplay_turn = trigger_next_roleplay_turn
+
+    async def process_frame(self, frame, direction: FrameDirection): 
+        await super().process_frame(frame, direction)
+        # print("VoiceSwitcher processing frame:", type(frame).__name__)
+        if isinstance(frame, BotStoppedSpeakingFrame):
+            # print("==== BOT STOPPED SPEAKING, switch voice =====")
+            # Switch voice based on current speaker
+            if self._switch_voice:
+                await self._switch_voice()
+                await asyncio.sleep(0)  # yield to allow voice switch to take effect
+            # Trigger next roleplay turn
+            if self._trigger_next_roleplay_turn:
+                await self._trigger_next_roleplay_turn("")
+
+        await self.push_frame(frame, direction)
+
+
 @dataclass
 class PipelineComponents:
     pipeline: Pipeline
@@ -235,6 +261,7 @@ class VoicePipelineController:
         self._tts_service = None
         self._aec_proc: Optional[PyAECProcessor] = None
         self._push_up_tts_proc: Optional[PushUpTTSFrameProcessor] = None
+        self._voice_switcher: Optional[VoiceSwitcher] = None
         self._context_aggregator: Optional[OpenAIContextAggregatorPair] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
 
@@ -254,13 +281,9 @@ class VoicePipelineController:
 
         config = self._config_manager.config
         if config.llm.mode == "2personas":
-            
             #Get response from Persona 2 and append to dialogue.txt
             with self._dialogue_file.open("a", encoding="utf8") as f:
                 f.write(f"{self._current_speaker.upper()}: {text}\n")
-
-            # Trigger next round of conversation
-            await self._trigger_next_roleplay_turn(text)
 
     async def _on_assistant_partial(self, text: str) -> None:
         self._history.add_partial("assistant", text)
@@ -287,6 +310,10 @@ class VoicePipelineController:
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
         self._aec_proc = PyAECProcessor(mute_while_tts=(config.audio.aec == "mute_while_tts"))
         self._push_up_tts_proc = PushUpTTSFrameProcessor()
+        self._voice_switcher = VoiceSwitcher(
+            switch_voice=self._switch_voice,
+            trigger_next_roleplay_turn=self._trigger_next_roleplay_turn,
+        )
 
         messages = [
             {"role": "system", "content": config.llm.system_prompt}
@@ -326,6 +353,7 @@ class VoicePipelineController:
             self._tts_service,
             self._transport.output(),
             self._push_up_tts_proc,
+            self._voice_switcher,
             self._assistant_aggregator,
         ]
         return Pipeline(processors)
@@ -551,6 +579,18 @@ class VoicePipelineController:
 
         # Inject the next speaking turn
         await self._inject_user_turn(persona_input)
+
+    async def _switch_voice(self):
+        config = self._config_manager.config
+        persona = self._current_speaker
+        print("Switching voice to:", persona)
+        if persona == "persona1":
+            persona_voice = config.llm.persona1["voice"]
+        else:
+            persona_voice = config.llm.persona2["voice"]
+
+        # 🔊 Switch TTS voice based on active persona
+        self._tts_service.set_voice(persona_voice)
 
 
 async def run_voice_pipeline(session_name: Optional[str] = None) -> None:

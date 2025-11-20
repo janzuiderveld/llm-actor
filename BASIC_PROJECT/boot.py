@@ -51,7 +51,10 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "gemini-2.5-flash", # options: "gemini-2.5-flash", "openai/gpt-oss-20b", "deepseek-r1:1.5b",
+        "model": "gpt-oss:20b", 
+        # options: GOOGLE "gemini-2.5-flash", 
+        #          GROQ "openai/gpt-oss-20b", ...
+        #          OLLAMA "deepseek-r1:1.5b", "deepseek-r1:32b", "gpt-oss:20b"
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
@@ -82,7 +85,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
-PIPELINE = "google" # options: "google", "groq", "ollama"
+PIPELINE = "ollama" # options: "google", "groq", "ollama"
 
 
 def main() -> None:
