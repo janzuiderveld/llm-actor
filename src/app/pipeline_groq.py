@@ -170,9 +170,7 @@ class PushUpTTSFrameProcessor(FrameProcessor):
 
     async def process_frame(self, frame, direction: FrameDirection): 
         await super().process_frame(frame, direction)
-        if isinstance(frame, BotStoppedSpeakingFrame):
-            print("BOT STOPPED SPEAKING")
-            
+
         if isinstance(frame, TTSStartedFrame):
             # print("TTS STARTED")
             self._aec_ref._post_tts_counter = self._aec_ref._post_tts_timeout + 1
@@ -353,6 +351,16 @@ class VoicePipelineController:
                     return
             self._aec_proc = _NoAEC()
         self._push_up_tts_proc._aec_ref = self._aec_proc
+
+        if config.llm.mode == "1to1":
+            # replace voice switcher with no-op
+            class _NoVoiceSwitch(FrameProcessor):
+                def __init__(self, **kwargs):
+                    super().__init__(**kwargs)
+                async def process_frame(self, frame, direction: FrameDirection):
+                    await super().process_frame(frame, direction)
+                    await self.push_frame(frame, direction)
+            self._voice_switcher = _NoVoiceSwitch()
 
         processors = [
             self._transport.input(),
