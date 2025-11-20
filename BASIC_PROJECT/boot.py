@@ -65,6 +65,12 @@ RUNTIME_CONFIG = {
             "opening": settings_loader.p2_opening,
             "prompt": settings_loader.p2_prompt + PROMPT_APPEND,
             "voice": settings_loader.p2_voice,
+        },
+        "narrator": {
+            "name": settings_loader.n_name,
+            "opening": "",
+            "prompt": settings_loader.n_prompt + PROMPT_APPEND,
+            "voice": settings_loader.n_voice,
         }
     },
     "tts": {

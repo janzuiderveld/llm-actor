@@ -138,7 +138,8 @@ class LLMConfig:
     )
     mode: str = "1to1" #options: "1to1", "2personas", "narrator",
     persona1: Optional[Persona] = None,
-    persona2: Optional[Persona] = None
+    persona2: Optional[Persona] = None,
+    narrator: Optional[Persona] = None
 
 
 @dataclass

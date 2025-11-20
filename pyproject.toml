@@ -19,7 +19,8 @@ dependencies = [
     "watchfiles",
     "transformers[torch]==4.48.2",
     "onnx",
-    "onnxruntime"
+    "onnxruntime",
+    "keyboard"
 ]
 
 [project.optional-dependencies]
