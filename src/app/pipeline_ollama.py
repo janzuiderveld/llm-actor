@@ -56,6 +56,8 @@ from services.llm import build_ollama_llm
 from services.stt import build_deepgram_flux_stt
 from services.tts import build_deepgram_tts
 
+import keyboard
+
 UserCallback = Callable[[str], Awaitable[None]]
 LLM_TEXT_IS_TEXTFRAME = issubclass(LLMTextFrame, TextFrame)
 
@@ -217,7 +219,7 @@ class VoiceSwitcher(FrameProcessor):
                 await asyncio.sleep(0)  # yield to allow voice switch to take effect
             # Trigger next roleplay turn
             if self._trigger_next_roleplay_turn:
-                await self._trigger_next_roleplay_turn("")
+                await self._trigger_next_roleplay_turn()
 
         await self.push_frame(frame, direction)
 
@@ -265,9 +267,14 @@ class VoicePipelineController:
         self._context_aggregator: Optional[OpenAIContextAggregatorPair] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
 
+        self._previous_speaker = "persona2"
         self._current_speaker = "persona1"
         self._dialogue_file = Path("runtime/dialogue.txt")
         self._full_memory = ""
+        self._narrator_intervention = False
+        self._plot_twist = ""
+
+        threading.Thread(target=self._listen_for_space, daemon=True).start()
 
     async def _on_user_message(self, text: str) -> None:
         if self._components:
@@ -278,12 +285,16 @@ class VoicePipelineController:
 
     async def _on_assistant_message(self, text: str) -> None:
         self._history.add("assistant", text, replace_last=True)
-
         config = self._config_manager.config
-        if config.llm.mode == "2personas":
+
+        if self._current_speaker == "narrator":
+            self._plot_twist = text
+
+        if config.llm.mode == "2personas" or config.llm.mode == "narrator":
+            
             #Get response from Persona 2 and append to dialogue.txt
             with self._dialogue_file.open("a", encoding="utf8") as f:
-                f.write(f"{self._current_speaker.upper()}: {text}\n")
+                f.write(f"{self._current_speaker.upper()}:b {text}\n")
 
     async def _on_assistant_partial(self, text: str) -> None:
         self._history.add_partial("assistant", text)
@@ -294,7 +305,7 @@ class VoicePipelineController:
             raise RuntimeError("DEEPGRAM_API_KEY must be set.")
 
         transport_params = LocalAudioTransportParams(
-            audio_in_enabled=True,
+            audio_in_enabled=False,
             audio_in_sample_rate=16000,
             audio_out_enabled=True,
             audio_out_sample_rate=config.audio.output_sample_rate or config.tts.sample_rate,
@@ -534,7 +545,8 @@ class VoicePipelineController:
         await asyncio.sleep(0)
         self._components.params_watcher.drain_pending()
 
-        if config.llm.mode == "2personas":
+        if config.llm.mode == "2personas" or config.llm.mode == "narrator":
+
             # Inject the conversation starter
             await self._inject_user_turn(config.llm.persona1['opening'])
 
@@ -542,8 +554,12 @@ class VoicePipelineController:
             with self._dialogue_file.open("a", encoding="utf8") as f:
                 f.write(f"{self._current_speaker.upper()}: {config.llm.persona1['opening']}\n")
 
+            # persona_voice = config.llm.persona2["voice"]
+            # self._tts_service.set_voice(persona_voice)
+
             # Switch speakers
-            self._current_speaker = "persona2"
+            # self._current_speaker = "persona2"
+            # self._previous_speaker = "persona1"
 
         await runner.run(task)
 
@@ -554,16 +570,39 @@ class VoicePipelineController:
         self._components.inbox_watcher.stop()
         self._components.params_watcher.stop()
 
-    async def _trigger_next_roleplay_turn(self, last_reply: str):
+    async def _trigger_next_roleplay_turn(self):
         config = self._config_manager.config
+
+        with self._dialogue_file.open("a", encoding="utf8") as f:
+            f.write("in roleplay\n")
         
-        # Swap speaker
-        if self._current_speaker == "persona2":
-            self._current_speaker = "persona1"
+         # Swap speaker
+        if self._current_speaker == "narrator":
+            if(self._previous_speaker == "persona1"):
+                self._current_speaker = "persona2"
+                system_prompt = config.llm.persona2["prompt"]
+            else:
+                self._current_speaker = "persona1"
+                system_prompt = config.llm.persona1["prompt"]
+            self._previous_speaker = "narrator"
+        elif self._current_speaker == "persona2":
             system_prompt = config.llm.persona1["prompt"]
+            self._current_speaker = "persona1"
+            self._previous_speaker = "persona2"
+
+            if self._narrator_intervention == True:
+                self._current_speaker = "narrator"
+                system_prompt = config.llm.narrator["prompt"]
+                self._narrator_intervention = False
         else:
-            self._current_speaker = "persona2"
             system_prompt = config.llm.persona2["prompt"]
+            self._current_speaker = "persona2"
+            self._previous_speaker = "persona1"
+
+            if self._narrator_intervention == True:
+                self._current_speaker = "narrator"
+                system_prompt = config.llm.narrator["prompt"]
+                self._narrator_intervention = False
 
         try:
             if self._dialogue_file.exists():
@@ -575,19 +614,37 @@ class VoicePipelineController:
             self._full_memory = ""
 
         # Construct persona-specific input
-        persona_input = f"System:\n{system_prompt}\n\nThis is the history of the conversation, take account of it when formulating your answer:\n{self._full_memory}\n\nReply only to the last line of your conversation partner. Stay in character! Your turn:"
+        persona_input = ""
+        if(self._current_speaker == "narrator"):
+            persona_input = f"System:\n{system_prompt}\n\n.This is the history of the conversation, take account of it when formulating the plot twist:\n{self._full_memory}\n\n. Your turn:"
+        else:
+            persona_input = f"System:\n{system_prompt} Plot twist: {self._plot_twist}\n\nThis is the history of the conversation, take account of it when formulating your answer:\n{self._full_memory}\n\nReply only to the last line of the other persona. Take into account the context changes added by the NARRATOR. Stay in character! Your turn:"
 
         # Inject the next speaking turn
         await self._inject_user_turn(persona_input)
+
+    def _listen_for_space(self):
+        while True:
+            keyboard.wait("space")
+            self._narrator_intervention = True
 
     async def _switch_voice(self):
         config = self._config_manager.config
         persona = self._current_speaker
         print("Switching voice to:", persona)
         if persona == "persona1":
-            persona_voice = config.llm.persona1["voice"]
-        else:
             persona_voice = config.llm.persona2["voice"]
+            if self._narrator_intervention == True:
+                persona_voice = config.llm.narrator["voice"]
+        elif persona == "persona2":
+            persona_voice = config.llm.persona1["voice"]
+            if self._narrator_intervention == True:
+                persona_voice = config.llm.narrator["voice"]
+        else:
+            if(self._previous_speaker == "persona1"):
+                persona_voice = config.llm.persona2["voice"]
+            else:
+                persona_voice = config.llm.persona1["voice"]
 
         # 🔊 Switch TTS voice based on active persona
         self._tts_service.set_voice(persona_voice)
