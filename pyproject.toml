@@ -11,6 +11,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pipecat-ai[deepgram,google,groq,local,silero,local-smart-turn-v3]",
+    "pyaec",
     "python-dotenv",
     "pydantic",
     "sounddevice>=0.4",
