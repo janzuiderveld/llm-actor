@@ -118,6 +118,13 @@ class STTConfig:
     eot_threshold: float = 0.85
     eot_timeout_ms: int = 1500
 
+@dataclass
+class Persona:
+    name: str = ""
+    opening: Optional[str] = ""
+    prompt: str = ""
+    voice: str = ""
+
 
 @dataclass
 class LLMConfig:
@@ -129,6 +136,9 @@ class LLMConfig:
         "To request external actions, include them inside <...> within your reply. "
         "Keep them short and machine-readable. Do not speak the text inside <...>."
     )
+    mode: str = "1to1" #options: "1to1", "2personas", "narrator",
+    persona1: Optional[Persona] = None,
+    persona2: Optional[Persona] = None
 
 
 @dataclass

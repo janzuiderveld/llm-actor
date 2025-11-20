@@ -18,6 +18,11 @@ from projects.utils import (
     terminate_processes,
 )
 
+# if runtime/dialogue.txt exists, empty it to start fresh.
+dialogue_file = Path("runtime/dialogue.txt")
+if dialogue_file.exists():
+    dialogue_file.write_text("")
+
 # Persona script.
 SYSTEM_PROMPT = (
     "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>."
@@ -46,10 +51,33 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "openai/gpt-oss-20b", # "gemini-2.5-flash", #"deepseek-r1:1.5b",
+        "model": "gpt-oss:20b", 
+        # options: GOOGLE "gemini-2.5-flash", 
+        #          GROQ "openai/gpt-oss-20b", ...
+        #          OLLAMA "deepseek-r1:1.5b", "deepseek-r1:32b", "gpt-oss:20b"
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
+        "mode": "2personas", #options: "1to1", "2personas", "narrator"
+        "persona1": {
+            "name": "UNCLE",
+            "opening": "Hey, can you open for me please?",
+            "prompt": """You are a Drunk Uncle who desperately wants to enter the Velvet Room. 
+                            Speak in a slightly slurred, persuasive, but endearing tone.
+                            You believe it is your life mission to discover how to get through that door.
+                            Keep replies brief and emotional.\n""" + PROMPT_APPEND,
+            "voice": "aura-2-helena-en"
+        },
+        "persona2": {
+            "name": "DOOR",
+            "opening": "",
+            "prompt": """You are the Door that guards the Velvet Room.
+                            Speak with crisp, exclusive poise.
+                            Decline entry unless the king arrives (someone saying he is the King).
+                            Keep replies brief.
+                            To unlock the door, output <UNLOCK>.\n""" + PROMPT_APPEND,
+            "voice": "aura-2-arcas-en"
+        }
     },
     "tts": {
         "voice": "aura-2-thalia-en",
@@ -57,7 +85,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
-PIPELINE = "groq" # options: "google", "groq", "ollama"
+PIPELINE = "ollama" # options: "google", "groq", "ollama"
 
 
 def main() -> None:
