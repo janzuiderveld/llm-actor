@@ -14,3 +14,4 @@ runtime/*.log
 .idea/
 .vscode/
 runtime/dialogue.txt
+/src/llm_actor.egg-info
