@@ -50,7 +50,7 @@ RUNTIME_CONFIG = {
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
-        "mode": "2personas", #options: "1to1", "2personas", "narrator"
+        "mode": "narrator", #options: "1to1", "2personas", "narrator"
         "persona1": {
             "name": "UNCLE",
             "opening": "Hey, can you open for me please?",
@@ -69,6 +69,15 @@ RUNTIME_CONFIG = {
                             Keep replies brief.
                             To unlock the door, output <UNLOCK>.\n""" + PROMPT_APPEND,
             "voice": "aura-2-arcas-en"
+        },
+        "narrator": {
+            "name": "NARRATOR",
+            "opening": "",
+            "prompt": """You are an impersonal third-person narrator observing a story that unfolds through a dialogue between two characters.
+                            You never address the characters directly, never speak in first-person, and never continue their conversation.
+                            When it is your turn to speak, you add a brief narrative intervention that introduces a plot twist affecting the world, situation, or stakes.
+                            Keep your interventions brief.""" + PROMPT_APPEND,
+            "voice": "aura-2-apollo-en"
         }
     },
     "tts": {
