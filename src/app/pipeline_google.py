@@ -27,6 +27,7 @@ from pipecat.frames.frames import (
     TranscriptionFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
+    BotStoppedSpeakingFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -250,10 +251,12 @@ class PushUpTTSFrameProcessor(FrameProcessor):
 
     async def process_frame(self, frame, direction: FrameDirection): 
         await super().process_frame(frame, direction)
+
         if isinstance(frame, TTSStartedFrame):
             # print("TTS STARTED")
             self._aec_ref._post_tts_counter = self._aec_ref._post_tts_timeout + 1
-            await self.push_frame(STTMuteFrame(True), FrameDirection.UPSTREAM)
+            if self._aec_ref._mute_while_tts:
+                await self.push_frame(STTMuteFrame(True), FrameDirection.UPSTREAM)
         #     await self.push_frame(frame, FrameDirection.UPSTREAM)
         if isinstance(frame, TTSStoppedFrame) or isinstance(frame, UserStartedSpeakingFrame):
             # print("TTS STOPPED")
@@ -275,6 +278,23 @@ class PushUpTTSFrameProcessor(FrameProcessor):
             # Feed into AEC processor (instead of global)
             if hasattr(self, "_aec_ref") and self._aec_ref:
                 self._aec_ref.add_tts_audio(resampled)
+        await self.push_frame(frame, direction)
+
+class VoiceSwitcher(FrameProcessor):
+    def __init__(self,
+                 switch_voice: Optional[UserCallback] = None,
+                  **kwargs):
+        super().__init__(**kwargs)
+        self._switch_voice = switch_voice
+
+    async def process_frame(self, frame, direction: FrameDirection): 
+        await super().process_frame(frame, direction)
+        # print("VoiceSwitcher processing frame:", type(frame).__name__)
+        if isinstance(frame, BotStoppedSpeakingFrame):
+            print("==== BOT STOPPED SPEAKING, switch voice =====")
+            # Switch voice based on current speaker
+            if self._switch_voice:
+                await self._switch_voice()
         await self.push_frame(frame, direction)
 
 @dataclass
@@ -317,6 +337,7 @@ class VoicePipelineController:
         self._tts_service = None
         self._aec_proc: Optional[PyAECProcessor] = None
         self._push_up_tts_proc: Optional[PushUpTTSFrameProcessor] = None
+        self._voice_switcher: Optional[VoiceSwitcher] = None
         self._speech_gate: Optional[AssistantSpeechGate] = None
         self._user_aggregator: Optional[UserAggregator] = None
         self._assistant_aggregator: Optional[AssistantAggregator] = None
@@ -328,7 +349,11 @@ class VoicePipelineController:
     async def _on_user_message(self, text: str) -> None:
         if self._components:
             self._components.params_watcher.drain_pending()
-        self._history.add("user", text)
+        config = self._config_manager.config
+        if config.llm.mode == "2personas":
+            await self._trigger_next_roleplay_turn(text)
+        else:
+            self._history.add("user", text)
         if "turn_start" not in self._metrics.marks:
             self._metrics.mark("turn_start")
 
@@ -343,7 +368,7 @@ class VoicePipelineController:
                 f.write(f"{self._current_speaker.upper()}: {text}\n")
 
             # Trigger next round of conversation
-            await self._trigger_next_roleplay_turn(text)
+            # await self._trigger_next_roleplay_turn(text)
 
     async def _on_assistant_partial(self, text: str) -> None:
         self._history.add_partial("assistant", text)
@@ -368,6 +393,9 @@ class VoicePipelineController:
         self._tts_service = build_deepgram_tts(config, keys["deepgram"])
         self._aec_proc = PyAECProcessor(mute_while_tts=(config.audio.aec == "mute_while_tts"))
         self._push_up_tts_proc = PushUpTTSFrameProcessor()
+        self._voice_switcher = VoiceSwitcher(
+            switch_voice=self._switch_voice
+        )
         self._speech_gate = AssistantSpeechGate()
 
         context_pair: GoogleContextAggregatorPair = create_google_context(
@@ -418,6 +446,7 @@ class VoicePipelineController:
             self._tts_service,
             self._transport.output(),
             self._push_up_tts_proc,
+            self._voice_switcher,
         ]
         return Pipeline(processors)
 
@@ -448,6 +477,7 @@ class VoicePipelineController:
                 if self._speech_gate:
                     self._speech_gate.stop_speaking()
                 metrics.mark("turn_complete")
+                print("=== TURN COMPLETE ===")
                 metrics.compute_turn_metrics()
                 metrics.reset()
                 if self._components:
@@ -602,11 +632,11 @@ class VoicePipelineController:
             self._tts_service.set_voice(persona_voice)
 
             # Inject the conversation starter
-            await self._inject_user_turn(config.llm.persona1["opening"])
+            await self._inject_user_turn(config.llm.persona1['opening'])
 
             # Save the line into the dialogue file
             with self._dialogue_file.open("a", encoding="utf8") as f:
-                f.write(f"{self._current_speaker.upper()}: {config.llm.persona1["opening"]}\n")
+                f.write(f"{self._current_speaker.upper()}: {config.llm.persona1['opening']}\n")
 
             # Switch speakers
             self._current_speaker = "persona2"
@@ -634,7 +664,7 @@ class VoicePipelineController:
             persona_voice = config.llm.persona2["voice"]
 
         # 🔊 Switch TTS voice based on active persona
-        self._tts_service.set_voice(persona_voice)
+        # self._tts_service.set_voice(persona_voice)
 
         try:
             if self._dialogue_file.exists():
@@ -650,6 +680,18 @@ class VoicePipelineController:
 
         # Inject the next speaking turn
         await self._inject_user_turn(persona_input)
+
+    async def _switch_voice(self):
+        config = self._config_manager.config
+        persona = self._current_speaker
+        print("Switching voice to:", persona)
+        if persona == "persona1":
+            persona_voice = config.llm.persona1["voice"]
+        else:
+            persona_voice = config.llm.persona2["voice"]
+
+        # 🔊 Switch TTS voice based on active persona
+        self._tts_service.set_voice(persona_voice)
 
 
 async def run_voice_pipeline(session_name: Optional[str] = None) -> None:

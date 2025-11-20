@@ -13,3 +13,4 @@ runtime/*.log
 .DS_Store
 .idea/
 .vscode/
+runtime/dialogue.txt

@@ -170,7 +170,8 @@ class PushUpTTSFrameProcessor(FrameProcessor):
         if isinstance(frame, TTSStartedFrame):
             # print("TTS STARTED")
             self._aec_ref._post_tts_counter = self._aec_ref._post_tts_timeout + 1
-            await self.push_frame(STTMuteFrame(True), FrameDirection.UPSTREAM)
+            if self._aec_ref._mute_while_tts:
+                await self.push_frame(STTMuteFrame(True), FrameDirection.UPSTREAM)
         #     await self.push_frame(frame, FrameDirection.UPSTREAM)
         if isinstance(frame, TTSStoppedFrame) or isinstance(frame, UserStartedSpeakingFrame):
             # print("TTS STOPPED")
@@ -507,11 +508,11 @@ class VoicePipelineController:
 
         if config.llm.mode == "2personas":
             # Inject the conversation starter
-            await self._inject_user_turn(config.llm.persona1["opening"])
+            await self._inject_user_turn(config.llm.persona1['opening'])
 
             # Save the line into the dialogue file
             with self._dialogue_file.open("a", encoding="utf8") as f:
-                f.write(f"{self._current_speaker.upper()}: {config.llm.persona1["opening"]}\n")
+                f.write(f"{self._current_speaker.upper()}: {config.llm.persona1['opening']}\n")
 
             # Switch speakers
             self._current_speaker = "persona2"
