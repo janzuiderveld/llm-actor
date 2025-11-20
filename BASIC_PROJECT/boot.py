@@ -61,7 +61,6 @@ RUNTIME_CONFIG = {
             "voice": settings_loader.p1_voice,
         },
         "persona2": {
-
             "name": settings_loader.p2_name,
             "opening": settings_loader.p2_opening,
             "prompt": settings_loader.p2_prompt + PROMPT_APPEND,
