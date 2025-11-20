@@ -18,6 +18,11 @@ from projects.utils import (
     terminate_processes,
 )
 
+# if runtime/dialogue.txt exists, empty it to start fresh.
+dialogue_file = Path("runtime/dialogue.txt")
+if dialogue_file.exists():
+    dialogue_file.write_text("")
+
 # Persona script.
 SYSTEM_PROMPT = (
     "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>."
@@ -33,7 +38,7 @@ SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + PROMPT_APPEND
 RUNTIME_CONFIG = {
     "audio": {
         "input_device_index": 1,
-        "output_device_index": 3,
+        "output_device_index": 2,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
         "aec": "mute_while_tts", # options: "off", "mute_while_tts", "pyaec"
@@ -46,7 +51,10 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "gemini-2.5-flash", # options: "gemini-2.5-flash", "openai/gpt-oss-20b", "deepseek-r1:1.5b",
+        "model": "gpt-oss:20b", 
+        # options: GOOGLE "gemini-2.5-flash", 
+        #          GROQ "openai/gpt-oss-20b", ...
+        #          OLLAMA "deepseek-r1:1.5b", "deepseek-r1:32b", "gpt-oss:20b"
         "temperature": 0.2,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
@@ -86,7 +94,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
-PIPELINE = "google" # options: "google", "groq", "ollama"
+PIPELINE = "ollama" # options: "google", "groq", "ollama"
 
 
 def main() -> None:
