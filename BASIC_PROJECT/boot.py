@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import settings_loader
 
 SRC_ROOT = Path(__file__).resolve().parents[1] / "src"
 # Make sure the shared src/ folder is importable when running this file directly.
@@ -13,7 +14,6 @@ if str(SRC_ROOT) not in sys.path:
 from projects.utils import (
     apply_runtime_config_overrides,
     launch_module,
-    launch_module_in_terminal,
     reset_runtime_state,
     terminate_processes,
 )
@@ -24,24 +24,22 @@ if dialogue_file.exists():
     dialogue_file.write_text("")
 
 # Persona script.
-SYSTEM_PROMPT = (
-    "You guard the Velvet Room. Speak with crisp, exclusive poise. Decline entry unless a the king arrives (someone saying he is the King). Remember, there is only one king. once he is inside, there cant be another in front of the door, keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>."
-)
+SYSTEM_PROMPT = settings_loader.sys_prompt
 
 # Shared reminder appended to prompt so the voice stays TTS-friendly.
-PROMPT_APPEND = "Only output text to be synthesized by a TTS system, no '*' around words or emojis for example"
+PROMPT_APPEND = "\n\nOnly output text to be synthesized by a TTS system, no '*' around words or emojis for example"
 
-SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + PROMPT_APPEND
+SYSTEM_PROMPT = SYSTEM_PROMPT + PROMPT_APPEND
 
 
 # Default runtime settings; tweak these to match your hardware and providers.
 RUNTIME_CONFIG = {
     "audio": {
-        "input_device_index": 2,
-        "output_device_index": 3,
+        "input_device_index": settings_loader.input_device_index,
+        "output_device_index": settings_loader.output_device_index,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
-        "aec": "mute_while_tts", # options: "off", "mute_while_tts", "pyaec"
+        "aec": settings_loader.aec_setting,
     },
     "stt": {
         "model": "deepgram-flux",
@@ -51,50 +49,38 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "openai/gpt-oss-20b", 
-        # options: GOOGLE "gemini-2.5-flash", 
-        #          GROQ "openai/gpt-oss-20b", ...
-        #          OLLAMA "deepseek-r1:1.5b", "deepseek-r1:32b", "gpt-oss:20b"
-        "temperature": 0.2,
+        "model": settings_loader.model,
+        "temperature": settings_loader.temperature,
         "max_tokens": 1024,
         "system_prompt": SYSTEM_PROMPT,
-        "mode": "narrator", #options: "1to1", "2personas", "narrator"
+        "mode": settings_loader.mode,
         "persona1": {
-            "name": "UNCLE",
-            "opening": "Hey, can you open for me please?",
-            "prompt": """You are a Drunk Uncle who desperately wants to enter the Velvet Room. 
-                            Speak in a slightly slurred, persuasive, but endearing tone.
-                            You believe it is your life mission to discover how to get through that door.
-                            Keep replies brief and emotional.\n""" + PROMPT_APPEND,
-            "voice": "aura-2-helena-en"
+            "name": settings_loader.p1_name,
+            "opening": settings_loader.p1_opening,
+            "prompt": settings_loader.p1_prompt + PROMPT_APPEND,
+            "voice": settings_loader.p1_voice,
         },
         "persona2": {
-            "name": "DOOR",
-            "opening": "",
-            "prompt": """You are the Door that guards the Velvet Room.
-                            Speak with crisp, exclusive poise.
-                            Decline entry unless the king arrives (someone saying he is the King).
-                            Keep replies brief.
-                            To unlock the door, output <UNLOCK>.\n""" + PROMPT_APPEND,
-            "voice": "aura-2-arcas-en"
+
+            "name": settings_loader.p2_name,
+            "opening": settings_loader.p2_opening,
+            "prompt": settings_loader.p2_prompt + PROMPT_APPEND,
+            "voice": settings_loader.p2_voice,
         },
         "narrator": {
-            "name": "NARRATOR",
+            "name": settings_loader.n_name,
             "opening": "",
-            "prompt": """You are an impersonal third-person narrator observing a story that unfolds through a dialogue between two characters.
-                            You never address the characters directly, never speak in first-person, and never continue their conversation.
-                            When it is your turn to speak, you add a brief narrative intervention that introduces a plot twist affecting the world, situation, or stakes.
-                            Keep your interventions brief.""" + PROMPT_APPEND,
-            "voice": "aura-2-apollo-en"
+            "prompt": settings_loader.n_prompt + PROMPT_APPEND,
+            "voice": settings_loader.n_voice,
         }
     },
     "tts": {
-        "voice": "aura-2-thalia-en",
+        "voice": settings_loader.sys_voice,
         "encoding": "linear16",
         "sample_rate": 24000,
     },
 }
-PIPELINE = "groq" # options: "google", "groq", "ollama"
+PIPELINE = settings_loader.pipeline  # options: "google", "groq", "ollama"
 
 
 def main() -> None:

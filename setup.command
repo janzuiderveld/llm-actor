@@ -20,6 +20,8 @@ python -m sounddevice
 # open .env in default editor
 if [[ "$OSTYPE" == "darwin"* ]]; then
     open -e .env
+    open -e ./BASIC_PROJECT/settings.ini
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     xdg-open .env
+    xdg-open ./BASIC_PROJECT/settings.ini
 fi
