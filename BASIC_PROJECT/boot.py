@@ -37,8 +37,8 @@ SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + PROMPT_APPEND
 # Default runtime settings; tweak these to match your hardware and providers.
 RUNTIME_CONFIG = {
     "audio": {
-        "input_device_index": 1,
-        "output_device_index": 2,
+        "input_device_index": 2,
+        "output_device_index": 3,
         "output_sample_rate": 48000,
         "auto_select_devices": False,
         "aec": "mute_while_tts", # options: "off", "mute_while_tts", "pyaec"
@@ -51,7 +51,7 @@ RUNTIME_CONFIG = {
         "eot_timeout_ms": 1500,
     },
     "llm": {
-        "model": "gemini-2.5-flash", 
+        "model": "openai/gpt-oss-20b", 
         # options: GOOGLE "gemini-2.5-flash", 
         #          GROQ "openai/gpt-oss-20b", ...
         #          OLLAMA "deepseek-r1:1.5b", "deepseek-r1:32b", "gpt-oss:20b"
@@ -94,7 +94,7 @@ RUNTIME_CONFIG = {
         "sample_rate": 24000,
     },
 }
-PIPELINE = "google" # options: "google", "groq", "ollama"
+PIPELINE = "groq" # options: "google", "groq", "ollama"
 
 
 def main() -> None:
