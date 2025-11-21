@@ -4,4 +4,4 @@ set -e
 cd "$(dirname "$0")"
 
 source .venv/bin/activate
-sudo python BASIC_PROJECT/boot.py
+sudo python3 BASIC_PROJECT/boot.py

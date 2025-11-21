@@ -15,7 +15,7 @@ fi
 
 # print sounddevice info
 echo "==== Sound device info: ===="
-python -m sounddevice
+python3 -m sounddevice
 
 # open .env in default editor
 if [[ "$OSTYPE" == "darwin"* ]]; then
