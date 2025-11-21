@@ -2,6 +2,9 @@
 set -e
 
 cd "$(dirname "$0")"
+/Applications/Python\ 3.11/Install\ Certificates.command
+
+brew install portaudio
 
 python3 -m venv .venv
 source .venv/bin/activate
