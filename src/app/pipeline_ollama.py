@@ -625,10 +625,13 @@ class VoicePipelineController:
 
         # Construct persona-specific input
         persona_input = ""
-        if(self._current_speaker == "narrator"):
-            persona_input = f"System:\n{system_prompt}\n\n.This is the history of the conversation, take account of it when formulating the plot twist:\n{self._full_memory}\n\n. Your turn:"
+        if config.llm.mode == "narrator":
+            if self._current_speaker == "narrator":
+                persona_input = f"System:\n{system_prompt}\n\n.This is the history of the conversation, take account of it when formulating the plot twist:\n{self._full_memory}\n\n. Your turn:"
+            else:
+                persona_input = f"System:\n{system_prompt} Plot twist: {self._plot_twist}\n\nThis is the history of the conversation, take account of it when formulating your answer:\n{self._full_memory}\n\nReply only to the last line of the other persona. Take into account the context changes added by the NARRATOR. Stay in character! Your turn:"
         else:
-            persona_input = f"System:\n{system_prompt} Plot twist: {self._plot_twist}\n\nThis is the history of the conversation, take account of it when formulating your answer:\n{self._full_memory}\n\nReply only to the last line of the other persona. Take into account the context changes added by the NARRATOR. Stay in character! Your turn:"
+                persona_input = f"System:\n{system_prompt}\n\nThis is the history of the conversation, take account of it when formulating your answer:\n{self._full_memory}\n\nReply only to the last line of your conversation partner. Stay in character! Your turn:"
 
         # Inject the next speaking turn
         await self._inject_user_turn(persona_input)
