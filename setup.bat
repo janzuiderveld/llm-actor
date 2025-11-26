@@ -101,8 +101,8 @@ echo.
 cd "%TARGET_DIR%"
 
 REM === PYTHON ENV SETUP ===
-python -m venv .venv
-call .venv\Scripts\activate
+python -m venv venv
+call venv\Scripts\activate
 pip install -e .
 
 REM === EDIT .env FOR API KEYS ===
