@@ -8,6 +8,7 @@ set TARGET_DIR=llm-actor
 set PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
 set PYTHON_INSTALLER=python-3.11.9-amd64.exe
 
+
 echo Checking for Python...
 
 python --version >nul 2>&1
@@ -17,7 +18,7 @@ if errorlevel 1 (
     echo Downloading Python 3.11.9 installer...
 
     powershell -Command ^
-        "(New-Object System.Net.WebClient).DownloadFile('%PYTHON_INSTALLER_URL%', '%PYTHON_INSTALLER%')"
+        "Invoke-WebRequest -Uri '%PYTHON_INSTALLER_URL%' -OutFile '%PYTHON_INSTALLER%'"
 
     if not exist "%PYTHON_INSTALLER%" (
         echo Failed to download Python installer.
@@ -104,12 +105,16 @@ python -m venv .venv
 call .venv\Scripts\activate
 pip install -e .
 
-REM === ENSURE .env EXISTS ===
+REM === EDIT .env FOR API KEYS ===
 if not exist ".env" (
     copy ".env.example" ".env"
     notepad ".env"
 )
 
+REM === SOUNDDEVICE TEST ===
 python -m sounddevice
+
+REM === OPEN PROJECT SETTINGS FILE ===
+notepad "BASIC_PROJECT\settings.ini"
 
 pause
