@@ -13,9 +13,26 @@ echo Checking for Python...
 
 python --version >nul 2>&1
 if errorlevel 1 (
+    set NEED_PYTHON_INSTALL=1
+) else (
+    REM Extract version string
+    for /f "tokens=2 delims= " %%v in ('python --version') do set PY_VER=%%v
+    for /f "tokens=1,2,3 delims=." %%a in ("%PY_VER%") do (
+        set PY_MAJOR=%%a
+        set PY_MINOR=%%b
+    )
+
+    REM Check minimum required version = 3.10
+    if %PY_MAJOR% LSS 3 (
+        set NEED_PYTHON_INSTALL=1
+    ) else if %PY_MAJOR%==3 if %PY_MINOR% LSS 10 (
+        set NEED_PYTHON_INSTALL=1
+    )
+)
+
+if defined NEED_PYTHON_INSTALL (
     echo.
-    echo Python not found on this system.
-    echo Downloading Python 3.11.9 installer...
+    echo Python 3.10+ is required. Installing Python 3.11.9...
 
     powershell -Command ^
         "Invoke-WebRequest -Uri '%PYTHON_INSTALLER_URL%' -OutFile '%PYTHON_INSTALLER%'"
@@ -26,38 +43,32 @@ if errorlevel 1 (
         exit /b 1
     )
 
-    echo Running Python installer...
     start "" "%PYTHON_INSTALLER%"
 
     echo.
-    echo ================= IMPORTANT =================
-    echo When the installer opens, make sure to enable:
+    echo ================= IMPORTANT ========================
+    echo Enable the option:
     echo.
-    echo       [x] Add python.exe to PATH
+    echo      [x] Add python.exe to PATH environment variable
     echo.
-    echo Without this, the installation will not work.
-    echo ==============================================
+    echo The installer will not work without this.
+    echo ====================================================
     echo.
     pause
 
     echo Rechecking Python availability...
     python --version >nul 2>&1
     if errorlevel 1 (
-        echo.
         echo Python is still not detected in PATH.
-        echo Please confirm that you selected:
-        echo     "Add python.exe to PATH"
-        echo in the installer.
-        echo.
-        echo If you already installed Python, restart the script
-        echo after opening a new Command Prompt window.
+        echo Please verify you enabled "Add python.exe to PATH environment variable".
         pause
         exit /b 1
     )
 )
 
-echo Python detected.
+echo Python detected and version is sufficient.
 echo.
+
 
 
 REM === CLONE OR DOWNLOAD PROJECT ===
@@ -105,11 +116,39 @@ python -m venv venv
 call venv\Scripts\activate
 pip install -e .
 
-REM === EDIT .env FOR API KEYS ===
+REM === CHECK .env ===
 if not exist ".env" (
     copy ".env.example" ".env"
-    notepad ".env"
 )
+
+REM === CHECK FOR DEFAULT DEEPGRAM API KEY ===
+set NEED_DEEPGRAM_SETUP=
+
+for /f "usebackq tokens=* delims=" %%L in (".env") do (
+    echo %%L | findstr /C:"DEEPGRAM_API_KEY=your-deepgram-api-key" >nul
+    if not errorlevel 1 (
+        set NEED_DEEPGRAM_SETUP=1
+    )
+)
+
+if defined NEED_DEEPGRAM_SETUP (
+    echo.
+    echo API key[s] not yet configured.
+    echo Opening .env for editing...
+    notepad ".env"
+
+    echo Launching Deepgram signup page...
+    start "" "https://console.deepgram.com/"
+
+    echo Launching Groq signup page...
+    start "" "https://console.groq.com/"
+
+    echo.
+    echo Please register or log in, create an API key,
+    echo and paste it into _API_KEY inside .env.
+    echo.
+)
+
 
 REM === SOUNDDEVICE TEST ===
 python -m sounddevice
