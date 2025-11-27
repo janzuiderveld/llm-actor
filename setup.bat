@@ -8,27 +8,36 @@ set TARGET_DIR=llm-actor
 set PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
 set PYTHON_INSTALLER=python-3.11.9-amd64.exe
 
-
 echo Checking for Python...
+setlocal enabledelayedexpansion
 
 python --version >nul 2>&1
 if errorlevel 1 (
     set NEED_PYTHON_INSTALL=1
 ) else (
-    REM Extract version string
+    REM Extract version string safely
     for /f "tokens=2 delims= " %%v in ('python --version') do set PY_VER=%%v
-    for /f "tokens=1,2,3 delims=." %%a in ("%PY_VER%") do (
+
+    REM Split Major.Minor.Patch
+    for /f "tokens=1,2,3 delims=." %%a in ("!PY_VER!") do (
         set PY_MAJOR=%%a
         set PY_MINOR=%%b
     )
 
-    REM Check minimum required version = 3.10
-    if %PY_MAJOR% LSS 3 (
-        set NEED_PYTHON_INSTALL=1
-    ) else if %PY_MAJOR%==3 if %PY_MINOR% LSS 10 (
-        set NEED_PYTHON_INSTALL=1
+    REM Ensure values exist before comparing
+    if not defined PY_MAJOR set NEED_PYTHON_INSTALL=1
+    if not defined PY_MINOR set NEED_PYTHON_INSTALL=1
+
+    REM Compare version numbers
+    if not defined NEED_PYTHON_INSTALL (
+        if !PY_MAJOR! LSS 3 (
+            set NEED_PYTHON_INSTALL=1
+        ) else if !PY_MAJOR!==3 if !PY_MINOR! LSS 10 (
+            set NEED_PYTHON_INSTALL=1
+        )
     )
 )
+
 
 if defined NEED_PYTHON_INSTALL (
     echo.
