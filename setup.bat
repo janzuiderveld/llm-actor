@@ -55,27 +55,27 @@ if defined NEED_PYTHON_INSTALL (
     start "" "%PYTHON_INSTALLER%"
 
     echo.
-    echo ================= IMPORTANT ========================
+    echo ================= IMPORTANT =================
     echo Enable the option:
     echo.
-    echo      [x] Add python.exe to PATH environment variable
+    echo      [x] Add python.exe to PATH
     echo.
     echo The installer will not work without this.
-    echo ====================================================
+    echo =============================================
     echo.
     pause
 
     echo Rechecking Python availability...
     python --version >nul 2>&1
     if errorlevel 1 (
-        echo Python is still not detected in PATH.
-        echo Please verify you enabled "Add python.exe to PATH environment variable".
+        echo Python is still not detected in PATH. You probably need to run this setup again.
+        echo Please verify you enabled "Add python.exe to PATH".
         pause
         exit /b 1
     )
 )
 
-echo Python detected and version is sufficient.
+echo Python detected.
 echo.
 
 
@@ -84,13 +84,9 @@ REM === CLONE OR DOWNLOAD PROJECT ===
 if not exist "%TARGET_DIR%" (
     echo Project directory not found. Preparing to fetch the repository...
 
-    git --version >nul 2>&1
-    if %ERRORLEVEL%==0 (
-        echo Git detected. Cloning repository...
-        git clone "%REPO_URL%" "%TARGET_DIR%"
-    ) else (
-        echo Git not found. Downloading project ZIP instead...
-
+    where git >nul 2>&1
+    if errorlevel 1 (
+        echo Git not found. Using ZIP download...
         powershell -Command ^
             "(New-Object System.Net.WebClient).DownloadFile('%REPO_ZIP%', 'project.zip')"
 
@@ -111,6 +107,9 @@ if not exist "%TARGET_DIR%" (
                 ren "%%D" "%TARGET_DIR%"
             )
         )
+    ) else (
+        echo Git found. Cloning repository...
+        git clone "%REPO_URL%" "%TARGET_DIR%"
     )
 )
 
