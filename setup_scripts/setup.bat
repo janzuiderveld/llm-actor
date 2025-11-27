@@ -142,26 +142,34 @@ for /f "usebackq tokens=* delims=" %%L in (".env") do (
 if defined NEED_DEEPGRAM_SETUP (
     echo.
     echo API key[s] not yet configured.
-    echo Opening .env for editing...
-    notepad ".env"
-
-    echo Launching Deepgram signup page...
-    start "" "https://console.deepgram.com/"
-
-    echo Launching Groq signup page...
-    start "" "https://console.groq.com/"
-
+    echo Opening .env for editing and launching signup pages...
     echo.
     echo Please register or log in, create an API key,
     echo and paste it into _API_KEY inside .env.
     echo.
+    notepad ".env"
+    start "" "https://console.deepgram.com/"
+    start "" "https://console.groq.com/"
 )
 
+echo.
+echo Note the input and output device indices 
+echo from the sounddevice below, and edit them into
+echo BASIC_PROJECT\settings.ini as needed.
+echo.
 
 REM === SOUNDDEVICE TEST ===
 python -m sounddevice
-
-REM === OPEN PROJECT SETTINGS FILE ===
 notepad "BASIC_PROJECT\settings.ini"
+
+echo.
+echo Setup complete. You can now run the project
+echo by entering the llm_actor/ folder and executing:
+echo.
+echo     run.bat
+echo.
+echo To change any settings, run this setup again
+echo or edit the .env and settings.ini files directly.
+echo.
 
 pause
