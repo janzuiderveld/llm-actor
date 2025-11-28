@@ -7,17 +7,17 @@ set REPO_ZIP=https://github.com/RVirmoors/llm-actor/archive/refs/heads/main.zip
 set TARGET_DIR=llm-actor
 set PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
 set PYTHON_INSTALLER=python-3.11.9-amd64.exe
-set NEED_VCREDIST=
 
-REM === CHECK FOR VC++ REDISTRIBUTABLE ===
-REM Registry location used by VC++ 2015–2022 x64
+REM === CHECK FOR MSVC++ REDISTRIBUTABLE (x64) ===
+set "NEED_VCREDIST="
+
 reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed >nul 2>&1
 
 if errorlevel 1 (
-    set NEED_VCREDIST=1
+    set "NEED_VCREDIST=1"
 ) else (
     for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed ^| find "Installed"') do (
-        if NOT %%B==0x1 set NEED_VCREDIST=1
+        if NOT "%%B"=="0x1" set "NEED_VCREDIST=1"
     )
 )
 
@@ -26,8 +26,8 @@ if defined NEED_VCREDIST (
     echo Microsoft Visual C++ Redistributable (x64) not found.
     echo Downloading and installing VC++ runtime...
 
-    set VCREDIST_URL=https://aka.ms/vc14/vc_redist.x64.exe
-    set VCREDIST_FILE=vc_redist.x64.exe
+    set "VCREDIST_URL=https://aka.ms/vc14/vc_redist.x64.exe"
+    set "VCREDIST_FILE=vc_redist.x64.exe"
 
     powershell -Command ^
         "Invoke-WebRequest -Uri '%VCREDIST_URL%' -OutFile '%VCREDIST_FILE%'"
@@ -40,10 +40,10 @@ if defined NEED_VCREDIST (
 
     echo Running VC++ installer...
     start /wait "" "%VCREDIST_FILE%" /install /quiet /norestart
-
     echo VC++ redistributable installed.
     echo.
 )
+
 
 
 REM === CHECK FOR PYTHON 3.10+ ===
