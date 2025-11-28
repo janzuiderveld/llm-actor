@@ -122,6 +122,7 @@ cd "%TARGET_DIR%"
 REM === PYTHON ENV SETUP ===
 python -m venv venv
 call venv\Scripts\activate
+pip install --upgrade pip
 pip install .
 
 REM === CHECK .env ===
