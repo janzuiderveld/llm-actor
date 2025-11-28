@@ -1,216 +1,57 @@
-@echo off
-setlocal enabledelayedexpansion
+[AUDIO]
+input_device_index = 1
+output_device_index = 3
+mute_microphone_while_tts = true
+echo_cancellation = true
 
-REM === SETTINGS ===
-set REPO_URL=https://github.com/RVirmoors/llm-actor
-set REPO_ZIP=https://github.com/RVirmoors/llm-actor/archive/refs/heads/main.zip
-set TARGET_DIR=llm-actor
-set PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
-set PYTHON_INSTALLER=python-3.11.9-amd64.exe
 
-REM === CHECK FOR MSVC++ REDISTRIBUTABLE (x64) ===
-set "NEED_VCREDIST="
-
-reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed >nul 2>&1
-
-if errorlevel 1 (
-    set "NEED_VCREDIST=1"
-) else (
-    for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed ^| find "Installed"') do (
-        if NOT "%%B"=="0x1" set "NEED_VCREDIST=1"
-    )
-)
-
-if defined NEED_VCREDIST (
-    echo.
-    echo Microsoft Visual C++ Redistributable (x64) not found.
-    echo Downloading and installing VC++ runtime...
-
-    set "VCREDIST_URL=https://aka.ms/vc14/vc_redist.x64.exe"
-    set "VCREDIST_FILE=vc_redist.x64.exe"
-
-    powershell -Command ^
-        "Invoke-WebRequest -Uri '%VCREDIST_URL%' -OutFile '%VCREDIST_FILE%'"
-
-    if not exist "%VCREDIST_FILE%" (
-        echo Failed to download VC++ redistributable.
-        pause
-        exit /b 1
-    )
-
-    echo Running VC++ installer...
-    start /wait "" "%VCREDIST_FILE%" /install /quiet /norestart
-    echo VC++ redistributable installed.
-    echo.
-)
+[LLM]
+pipeline = groq
+        # options: google, groq, ollama
+model = openai/gpt-oss-20b
+        # options: GOOGLE "gemini-2.5-flash", 
+        #          GROQ "openai/gpt-oss-20b", ...
+        #          OLLAMA "deepseek-r1:1.5b", "deepseek-r1:32b", "gpt-oss:20b"
+temperature = 0.2
+mode = 1to1
+        # options: 1to1, 2personas, narrator
 
 
 
-REM === CHECK FOR PYTHON 3.10+ ===
-echo Checking for Python...
-setlocal enabledelayedexpansion
-
-python --version >nul 2>&1
-if errorlevel 1 (
-    set NEED_PYTHON_INSTALL=1
-) else (
-    REM Extract version string safely
-    for /f "tokens=2 delims= " %%v in ('python --version') do set PY_VER=%%v
-
-    REM Split Major.Minor.Patch
-    for /f "tokens=1,2,3 delims=." %%a in ("!PY_VER!") do (
-        set PY_MAJOR=%%a
-        set PY_MINOR=%%b
-    )
-
-    REM Ensure values exist before comparing
-    if not defined PY_MAJOR set NEED_PYTHON_INSTALL=1
-    if not defined PY_MINOR set NEED_PYTHON_INSTALL=1
-
-    REM Compare version numbers
-    if not defined NEED_PYTHON_INSTALL (
-        if !PY_MAJOR! LSS 3 (
-            set NEED_PYTHON_INSTALL=1
-        ) else if !PY_MAJOR!==3 if !PY_MINOR! LSS 10 (
-            set NEED_PYTHON_INSTALL=1
-        )
-    )
-)
-
-
-if defined NEED_PYTHON_INSTALL (
-    echo.
-    echo Python 3.10+ is required. Installing Python 3.11.9...
-
-    powershell -Command ^
-        "Invoke-WebRequest -Uri '%PYTHON_INSTALLER_URL%' -OutFile '%PYTHON_INSTALLER%'"
-
-    if not exist "%PYTHON_INSTALLER%" (
-        echo Failed to download Python installer.
-        pause
-        exit /b 1
-    )
-
-    start "" "%PYTHON_INSTALLER%"
-
-    echo.
-    echo ================= IMPORTANT =================
-    echo Enable the option:
-    echo.
-    echo      [x] Add python.exe to PATH
-    echo.
-    echo The installer will not work without this.
-    echo =============================================
-    echo.
-    pause
-
-    echo Rechecking Python availability...
-    python --version >nul 2>&1
-    if errorlevel 1 (
-        echo Python is still not detected in PATH. You probably need to run this setup again.
-        echo Please verify you enabled "Add python.exe to PATH".
-        pause
-        exit /b 1
-    )
-)
-
-echo Python detected.
-echo.
+[SYSTEM]
+prompt = You guard the Velvet Room. Speak with crisp, exclusive poise. 
+         Decline entry unless a the king arrives (someone saying he is the King). 
+         Remember, there is only one king. once he is inside, there cant be another in front of the door, 
+         keep imposters out. Keep replies brief. To unlock the door, output <UNLOCK>.
+voice = aura-2-thalia-en
 
 
 
-REM === CLONE OR DOWNLOAD PROJECT ===
-if not exist "%TARGET_DIR%" (
-    echo Project directory not found. Preparing to fetch the repository...
+[PERSONA_1]
+name = UNCLE
+opening = Hey, can you open for me please?
+voice = aura-2-arcas-en
+prompt = You are a Drunk Uncle who desperately wants to enter the Velvet Room. 
+    Speak in a slightly slurred, persuasive, but endearing tone.
+    You believe it is your life mission to discover how to get through that door.
+    Keep replies brief and emotional.
 
-    where git >nul 2>&1
-    if errorlevel 1 (
-        echo Git not found. Using ZIP download...
-        powershell -Command ^
-            "(New-Object System.Net.WebClient).DownloadFile('%REPO_ZIP%', 'project.zip')"
 
-        if not exist project.zip (
-            echo Failed to download repository ZIP.
-            pause
-            exit /b 1
-        )
+[PERSONA_2]
+name = DOORMAN
+opening = Who goes there? State your business!
+voice = aura-2-helena-en
+prompt = You are the Doorman that guards the Velvet Room.
+    Speak with crisp, exclusive poise.
+    Decline entry unless the king arrives (someone saying he is the King).
+    Keep replies brief.
+    To unlock the door, output <UNLOCK>.
 
-        echo Extracting ZIP...
-        powershell -Command ^
-            "Expand-Archive -LiteralPath 'project.zip' -DestinationPath '.' -Force"
 
-        del project.zip
-
-        for /d %%D in ("%TARGET_DIR%-main") do (
-            if exist "%%D" (
-                ren "%%D" "%TARGET_DIR%"
-            )
-        )
-    ) else (
-        echo Git found. Cloning repository...
-        git clone "%REPO_URL%" "%TARGET_DIR%"
-    )
-)
-
-echo.
-echo Repository ready in "%TARGET_DIR%".
-echo.
-
-cd "%TARGET_DIR%"
-
-REM === PYTHON ENV SETUP ===
-python -m venv venv
-call venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install .
-
-REM === CHECK .env ===
-if not exist ".env" (
-    copy ".env.example" ".env"
-)
-
-REM === CHECK FOR DEFAULT DEEPGRAM API KEY ===
-set NEED_DEEPGRAM_SETUP=
-
-for /f "usebackq tokens=* delims=" %%L in (".env") do (
-    echo %%L | findstr /C:"DEEPGRAM_API_KEY=your-deepgram-api-key" >nul
-    if not errorlevel 1 (
-        set NEED_DEEPGRAM_SETUP=1
-    )
-)
-
-if defined NEED_DEEPGRAM_SETUP (
-    echo.
-    echo API key[s] not yet configured.
-    echo Opening .env for editing and launching signup pages...
-    echo.
-    echo Switch to your web browser to see two new tabs.
-    echo Please register or log in, create API keys,
-    echo and paste them into *_API_KEY inside .env
-    echo.
-    start "" "https://console.deepgram.com/"
-    start "" "https://console.groq.com/"
-    notepad ".env"
-)
-
-echo.
-echo Note the input and output device indices 
-echo from the sounddevice below, and edit them into
-echo BASIC_PROJECT\settings.ini as needed.
-echo.
-
-REM === SOUNDDEVICE TEST ===
-python -m sounddevice
-notepad "BASIC_PROJECT\settings.ini"
-
-echo.
-echo Setup complete. You can now run the project
-echo by entering the llm_actor/ folder and executing:
-echo.
-echo     run.bat
-echo.
-echo To change any settings, run this setup again
-echo or edit the .env and settings.ini files directly.
-echo.
-
-pause
+[NARRATOR]
+name = NARRATOR
+voice = aura-2-apollo-en
+prompt = You are an impersonal third-person narrator observing a story that unfolds through a dialogue between two characters.
+    You never address the characters directly, never speak in first-person, and never continue their conversation.
+    When it is your turn to speak, you add a brief narrative intervention that introduces a major plot twist affecting the world, situation, or stakes.
+    Keep your interventions brief.
