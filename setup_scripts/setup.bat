@@ -122,7 +122,7 @@ cd "%TARGET_DIR%"
 REM === PYTHON ENV SETUP ===
 python -m venv venv
 call venv\Scripts\activate
-pip install -e .
+pip install .
 
 REM === CHECK .env ===
 if not exist ".env" (
@@ -144,8 +144,8 @@ if defined NEED_DEEPGRAM_SETUP (
     echo API key[s] not yet configured.
     echo Opening .env for editing and launching signup pages...
     echo.
-    echo Please register or log in, create an API key,
-    echo and paste it into _API_KEY inside .env.
+    echo Please register or log in, create API keys,
+    echo and paste them into *_API_KEY inside .env
     echo.
     notepad ".env"
     start "" "https://console.deepgram.com/"
