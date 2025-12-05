@@ -189,7 +189,7 @@ if not exist ".env" (
     copy ".env.example" ".env"
 )
 
-REM === CHECK FOR DEFAULT DEEPGRAM API KEY ===
+REM === CHECK FOR DEEPGRAM API KEY ===
 set NEED_DEEPGRAM_SETUP=
 
 for /f "usebackq tokens=* delims=" %%L in (".env") do (
