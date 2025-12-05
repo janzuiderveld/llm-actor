@@ -55,6 +55,7 @@ from app.session import SessionPaths, new_session
 from services.llm import build_ollama_llm
 from services.stt import build_deepgram_flux_stt
 from services.tts import build_deepgram_tts
+from services.tts_kokoro import KokoroTTSService
 
 import keyboard
 
@@ -318,7 +319,12 @@ class VoicePipelineController:
         
         self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
         self._llm_service = build_ollama_llm(config, keys.get("ollama_base_url", "http://localhost:11434/v1"))
-        self._tts_service = build_deepgram_tts(config, keys["deepgram"])
+        self._tts_service = build_deepgram_tts(config, keys["deepgram"]) if config.tts.model == "deepgram" else KokoroTTSService(
+            model_path="assets/kokoro-v1.0.onnx",
+            voices_path="assets/voices-v1.0.bin",
+            voice_id=config.tts.voice,
+            sample_rate=config.tts.sample_rate,
+        )        
         self._aec_proc = PyAECProcessor(mute_while_tts=(config.audio.aec == "mute_while_tts"))
         self._push_up_tts_proc = PushUpTTSFrameProcessor()
         self._voice_switcher = VoiceSwitcher(
