@@ -16,3 +16,4 @@ runtime/*.log
 runtime/dialogue.txt
 runtime/config.json
 /src/llm_actor.egg-info
+assets/*
