@@ -47,6 +47,7 @@ def build_groq_llm(config: RuntimeConfig, api_key: str) -> GroqLLMService:
         model=config.llm.model,
         params=params,
         system_instruction=config.llm.system_prompt,
+        reasoning_effort="none",
     )
 
 

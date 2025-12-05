@@ -5,6 +5,7 @@ REM === SETTINGS ===
 set REPO_URL=https://github.com/RVirmoors/llm-actor
 set REPO_ZIP=https://github.com/RVirmoors/llm-actor/archive/refs/heads/main.zip
 set TARGET_DIR=llm-actor
+set "ASSET_DIR=llm-actor\assets"
 set PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
 set PYTHON_INSTALLER=python-3.11.9-amd64.exe
 
@@ -33,8 +34,6 @@ if defined NEED_VCREDIST (
         exit /b 1
     )
 )
-
-
 
 
 
@@ -148,6 +147,35 @@ echo.
 echo Repository ready in "%TARGET_DIR%".
 echo.
 
+
+REM === DOWNLOAD KOKORO MODEL FILES ===
+
+if not exist "%ASSET_DIR%" mkdir "%ASSET_DIR%"
+
+echo Downloading kokoro-v1.0.onnx...
+powershell -Command ^
+  "Invoke-WebRequest -Uri 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' -OutFile '%ASSET_DIR%\kokoro-v1.0.onnx'"
+
+if not exist "%ASSET_DIR%\kokoro-v1.0.onnx" (
+    echo Failed to download kokoro-v1.0.onnx
+    pause
+    exit /b 1
+)
+
+echo Downloading voices-v1.0.bin...
+powershell -Command ^
+  "Invoke-WebRequest -Uri 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' -OutFile '%ASSET_DIR%\voices-v1.0.bin'"
+
+if not exist "%ASSET_DIR%\voices-v1.0.bin" (
+    echo Failed to download voices-v1.0.bin
+    pause
+    exit /b 1
+)
+
+echo Kokoro model files downloaded successfully.
+echo.
+
+
 cd "%TARGET_DIR%"
 
 REM === PYTHON ENV SETUP ===
@@ -161,7 +189,7 @@ if not exist ".env" (
     copy ".env.example" ".env"
 )
 
-REM === CHECK FOR DEFAULT DEEPGRAM API KEY ===
+REM === CHECK FOR DEEPGRAM API KEY ===
 set NEED_DEEPGRAM_SETUP=
 
 for /f "usebackq tokens=* delims=" %%L in (".env") do (

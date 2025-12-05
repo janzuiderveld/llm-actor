@@ -14,16 +14,19 @@ elif parser.getboolean("AUDIO", "echo_cancellation", fallback=False):
 else:
     aec_setting = "off"
 
-pipeline = parser.get("LLM", "pipeline", fallback="ollama")  # options: "google", "groq", "ollama"
-model = parser.get("LLM", "model", fallback="gpt-oss:20b")
+pipeline = parser.get("LLM", "pipeline", fallback="groq")  # options: "google", "groq", "ollama"
+model = parser.get("LLM", "model", fallback="qwen/qwen3-32b")
 # options: GOOGLE "gemini-2.5-flash", 
-#          GROQ "openai/gpt-oss-20b", ...
+#          GROQ "qwen/qwen3-32b", "openai/gpt-oss-20b", ...
 #          OLLAMA "deepseek-r1:1.5b", "deepseek-r1:32b", "gpt-oss:20b"
 temperature = parser.getfloat("LLM", "temperature", fallback=0.2)
 mode = parser.get("LLM", "mode", fallback="2personas")  # options: "1to1", "2personas", "NARRATOR"
 
+tts_model = parser.get("TTS", "model", fallback="kokoro")
+         # options: kokoro, deepgram
+
 sys_prompt = parser.get("SYSTEM", "prompt")
-sys_voice = parser.get("SYSTEM", "voice", fallback="aura-2-thalia-en")
+sys_voice = parser.get("SYSTEM", "voice", fallback="af_sarah")
 
 p1_name = parser.get("PERSONA_1", "name", fallback="UNCLE")
 p1_opening = parser.get("PERSONA_1", "opening")

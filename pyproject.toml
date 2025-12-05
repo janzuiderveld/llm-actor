@@ -12,6 +12,8 @@ requires-python = ">=3.10"
 dependencies = [
     "pipecat-ai[deepgram,google,groq,local,silero,local-smart-turn-v3]",
     "pyaec",
+    "kokoro",
+    "kokoro-onnx",
     "python-dotenv",
     "pydantic",
     "sounddevice>=0.4",
@@ -20,7 +22,7 @@ dependencies = [
     "transformers[torch]==4.48.2",
     "onnx",
     "onnxruntime",
-    "keyboard"
+    "keyboard",
 ]
 
 [project.optional-dependencies]
