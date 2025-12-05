@@ -144,7 +144,8 @@ class LLMConfig:
 
 @dataclass
 class TTSConfig:
-    voice: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_VOICE", "aura-2-thalia-en"))
+    model: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_TTS_MODEL", "kokoro"))
+    voice: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_VOICE", "af_sarah"))
     encoding: str = "linear16"
     sample_rate: int = 24000
 

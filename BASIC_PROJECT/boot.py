@@ -27,7 +27,7 @@ if dialogue_file.exists():
 SYSTEM_PROMPT = settings_loader.sys_prompt
 
 # Shared reminder appended to prompt so the voice stays TTS-friendly.
-PROMPT_APPEND = "\n\nOnly output text to be synthesized by a TTS system, no '*' around words or emojis for example"
+PROMPT_APPEND = "\n\nOnly output text to be synthesized by a TTS system, no '*' around words or emojis for example."
 
 SYSTEM_PROMPT = SYSTEM_PROMPT + PROMPT_APPEND
 
@@ -74,6 +74,7 @@ RUNTIME_CONFIG = {
         }
     },
     "tts": {
+        "model": settings_loader.tts_model,
         "voice": settings_loader.sys_voice,
         "encoding": "linear16",
         "sample_rate": 24000,
