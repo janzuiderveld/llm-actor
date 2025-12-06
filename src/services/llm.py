@@ -41,13 +41,18 @@ def build_groq_llm(config: RuntimeConfig, api_key: str) -> GroqLLMService:
         max_tokens=config.llm.max_tokens,
         temperature=config.llm.temperature,
     )
-    return GroqLLMService(
+
+    class NoThinkGroqLLMService(GroqLLMService):
+        def build_chat_completion_params(self, params_from_context):
+            params_from_context["reasoning_effort"] = "none"
+            return super().build_chat_completion_params(params_from_context)
+
+    return NoThinkGroqLLMService(
         api_key=api_key,
         base_url="https://api.groq.com/openai/v1",
         model=config.llm.model,
         params=params,
         system_instruction=config.llm.system_prompt,
-        reasoning_effort="none",
     )
 
 

@@ -152,6 +152,9 @@ REM === DOWNLOAD KOKORO MODEL FILES ===
 
 if not exist "%ASSET_DIR%" mkdir "%ASSET_DIR%"
 
+echo This project uses Kokoro for local text-to-speech.
+echo You can choose between Kokoro (default) or Deepgram TTS in settings.ini later.
+echo.
 echo Downloading kokoro-v1.0.onnx...
 powershell -Command ^
   "Invoke-WebRequest -Uri 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' -OutFile '%ASSET_DIR%\kokoro-v1.0.onnx'"
@@ -175,7 +178,7 @@ if not exist "%ASSET_DIR%\voices-v1.0.bin" (
 echo Kokoro model files downloaded successfully.
 echo.
 
-
+echo Setting up the project Python environment...
 cd "%TARGET_DIR%"
 
 REM === PYTHON ENV SETUP ===
@@ -202,11 +205,13 @@ for /f "usebackq tokens=* delims=" %%L in (".env") do (
 if defined NEED_DEEPGRAM_SETUP (
     echo.
     echo API key[s] not yet configured.
-    echo Opening .env for editing and launching signup pages...
     echo.
     echo Switch to your web browser to see two new tabs.
-    echo Please register or log in, create API keys,
-    echo and paste them into *_API_KEY inside .env
+    echo Please register or log in, create API keys and copy them,
+    echo then switch to Notepad where the .env file is open,
+    echo and paste them into the relevant *_API_KEY fields.
+    echo.
+    echo When you're done, save and close the notepad window.
     echo.
     start "" "https://console.deepgram.com/"
     start "" "https://console.groq.com/"
@@ -215,8 +220,10 @@ if defined NEED_DEEPGRAM_SETUP (
 
 echo.
 echo Note the input and output device indices 
-echo from the sounddevice below, and edit them into
+echo from the list below, and edit them into
 echo BASIC_PROJECT\settings.ini as needed.
+echo.
+echo When you're done, save and close the notepad window.
 echo.
 
 REM === SOUNDDEVICE TEST ===
