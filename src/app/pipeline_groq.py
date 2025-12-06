@@ -570,13 +570,6 @@ class VoicePipelineController:
             with self._dialogue_file.open("a", encoding="utf8") as f:
                 f.write(f"{self._current_speaker.upper()}: {config.llm.persona1['opening']}\n")
 
-            # persona_voice = config.llm.persona2["voice"]
-            # self._tts_service.set_voice(persona_voice)
-
-            # Switch speakers
-            # self._current_speaker = "persona2"
-            # self._previous_speaker = "persona1"
-
         await runner.run(task)
 
     async def stop(self) -> None:
