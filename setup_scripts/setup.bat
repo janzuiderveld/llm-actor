@@ -98,8 +98,9 @@ if defined NEED_PYTHON_INSTALL (
     echo Rechecking Python availability...
     python --version >nul 2>&1
     if errorlevel 1 (
-        echo Python is still not detected in PATH. You probably need to run this setup again.
-        echo Please verify you enabled "Add python.exe to PATH".
+        echo Python is still not detected in PATH. 
+        echo You probably simply need to run setup.bat again.
+        echo Please make sure you enabled "Add python.exe to PATH".
         pause
         exit /b 1
     )
