@@ -14,6 +14,9 @@ elif parser.getboolean("AUDIO", "echo_cancellation", fallback=False):
 else:
     aec_setting = "off"
 
+stt_model = parser.get("STT", "model", fallback="moonshine")
+         # options: deepgram-flux, moonshine
+
 pipeline = parser.get("LLM", "pipeline", fallback="groq")  # options: "google", "groq", "ollama"
 model = parser.get("LLM", "model", fallback="qwen/qwen3-32b")
 # options: GOOGLE "gemini-2.5-flash", 

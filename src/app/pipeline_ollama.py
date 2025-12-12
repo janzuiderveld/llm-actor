@@ -56,6 +56,7 @@ from services.llm import build_ollama_llm
 from services.stt import build_deepgram_flux_stt
 from services.tts import build_deepgram_tts
 from services.tts_kokoro import KokoroTTSService
+from services.stt_moonshine import MoonshineSTTService
 
 import keyboard
 
@@ -317,7 +318,12 @@ class VoicePipelineController:
         )
         self._transport = LocalAudioTransport(transport_params)
         
-        self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"])
+        self._stt_service = build_deepgram_flux_stt(config, keys["deepgram"]) if config.stt.model == "deepgram-flux" else MoonshineSTTService(
+            model_name="moonshine/tiny",
+            language="en",
+            vad_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(),
+        )
         self._llm_service = build_ollama_llm(config, keys.get("ollama_base_url", "http://localhost:11434/v1"))
         self._tts_service = build_deepgram_tts(config, keys["deepgram"]) if config.tts.model == "deepgram" else KokoroTTSService(
             model_path="assets/kokoro-v1.0.onnx",

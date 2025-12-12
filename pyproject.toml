@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "llm-actor"
 version = "0.1.1"
-description = "Thin Pipecat wrapper for Deepgram Flux → Gemini/Ollama → Deepgram Aura voice pipeline"
+description = "Thin Pipecat wrapper for Moonshine/Deepgram Flux → Groq/Gemini/Ollama → Kokoro/Deepgram Aura voice pipeline"
 authors = [{name = "Jan Zuiderveld, Grigore Burloiu, Lorena Cocora"}]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,6 +22,7 @@ dependencies = [
     "transformers[torch]==4.48.2",
     "onnx",
     "onnxruntime",
+    "useful-moonshine-onnx",
     "keyboard",
 ]
 
