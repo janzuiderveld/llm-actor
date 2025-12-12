@@ -10,10 +10,11 @@ from typing import AsyncGenerator, Optional
 import numpy as np
 from loguru import logger
 
-from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
+from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame, STTMuteFrame
 from pipecat.services.stt_service import SegmentedSTTService
 from pipecat.transcriptions.language import Language
 from pipecat.utils.time import time_now_iso8601
+from pipecat.processors.frame_processor import FrameDirection
 
 try:
     from moonshine_onnx import MoonshineOnnxModel, load_tokenizer
@@ -130,3 +131,8 @@ class MoonshineSTTService(SegmentedSTTService):
             yield TranscriptionFrame(text, "", time_now_iso8601(), self._settings["language"])
         else:
             yield ErrorFrame("No transcription produced.") 
+
+    async def process_audio_frame(self, frame, direction):
+        if self._muted:
+            return  # Skip processing if muted
+        return await super().process_audio_frame(frame, direction)
