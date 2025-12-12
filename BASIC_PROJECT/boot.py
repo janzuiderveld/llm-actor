@@ -42,7 +42,7 @@ RUNTIME_CONFIG = {
         "aec": settings_loader.aec_setting,
     },
     "stt": {
-        "model": "deepgram-flux",
+        "model": settings_loader.stt_model,
         "language": "en-US",
         "eager_eot_threshold": 0.7,
         "eot_threshold": 0.85,
