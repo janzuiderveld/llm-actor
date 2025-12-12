@@ -138,13 +138,14 @@ echo "Using Python at: $PYTHON_PATH"
 
 # ========= PYTHON CERTIFICATES =========
 
-PYTHON_REAL=$(python3 -c "import os,sys; print(os.path.realpath(sys.executable))")
-FRAMEWORK_ROOT=$(dirname "$(dirname "$PYTHON_REAL")")
-CERT_SCRIPT="$FRAMEWORK_ROOT/Install Certificates.command"
+PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+CERT_SCRIPT="/Applications/Python ${PY_VER}/Install Certificates.command"
 
 if [[ -f "$CERT_SCRIPT" ]]; then
-    echo "Running Python certificates installation..."
+    echo "Running certificate installer for Python $PY_VER..."
     bash "$CERT_SCRIPT"
+else
+    echo "No certificate installer found. (Homebrew or non-python.org installation)"
 fi
 
 
