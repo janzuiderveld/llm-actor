@@ -223,8 +223,8 @@ RUNTIME_CONFIG = {
         "hear_keep_mic_open": True,
     },
     "llm": {
-        "model": "gemini-3-flash-preview",
-        # "model": "gemini-2.5-flash",
+        # "model": "gemini-3-flash-preview",
+        "model": "gemini-2.5-flash",
         # "model": "openai-gpt-5.2-chat-latest",
         # "model": "ollama-gemma3:4b",
         "system_prompt": SYSTEM_PROMPT,

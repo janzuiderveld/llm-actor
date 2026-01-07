@@ -1,7 +1,7 @@
 {
   "audio": {
-    "input_device_index": 7,
-    "output_device_index": 8,
+    "input_device_index": 5,
+    "output_device_index": 6,
     "output_sample_rate": 48000,
     "auto_select_devices": false
   },
@@ -41,7 +41,7 @@
     "cutoff_marker": "[.. cut off by user utterance]",
     "say_voice": null,
     "say_rate_wpm": null,
-    "say_audio_device": null,
+    "say_audio_device": "172",
     "say_interactive": true
   }
 }
