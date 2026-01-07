@@ -33,6 +33,7 @@ class ParamsWatcher:
         self._thread: Optional[threading.Thread] = None
         self._offset = 0
         self._pending: List[Dict[str, object]] = []
+        self._last_mtime: Optional[float] = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -50,6 +51,7 @@ class ParamsWatcher:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.touch(exist_ok=True)
         while not self._stop_event.is_set():
+            self._reset_offset_if_truncated()
             with self._path.open("r", encoding="utf-8") as fh:
                 fh.seek(self._offset)
                 for line in iter(fh.readline, ""):
@@ -65,6 +67,24 @@ class ParamsWatcher:
                         if self._event_logger:
                             self._event_logger.emit("params_invalid", {"line": line})
             time.sleep(self._poll_interval)
+
+    def _reset_offset_if_truncated(self) -> None:
+        try:
+            stat = self._path.stat()
+        except FileNotFoundError:
+            return
+        size = stat.st_size
+        mtime = stat.st_mtime
+        if size < self._offset or (
+            self._last_mtime is not None and mtime > self._last_mtime and size <= self._offset
+        ):
+            self._offset = 0
+            if self._event_logger:
+                self._event_logger.emit(
+                    "params_truncated",
+                    {"size": size, "mtime": mtime, "timestamp": time.time()},
+                )
+        self._last_mtime = mtime
 
     def drain_pending(self) -> None:
         if not self._pending:
@@ -82,7 +102,11 @@ class ParamsWatcher:
             return
 
         if op == "llm.set":
-            updates = {k: payload[k] for k in ("model", "temperature", "max_tokens") if k in payload}
+            updates = {
+                k: payload[k]
+                for k in ("model", "temperature", "max_tokens", "thinking_level")
+                if k in payload
+            }
             self._config.apply_updates(llm=updates)
             self._apply_callback({"llm": updates})
         elif op == "llm.system":

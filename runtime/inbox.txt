@@ -1,4 +1,0 @@
-A: [The door unlocked, the personality of the door changed drastically, see current system message]
-P: [A new visitor steps before you.]
-A: [The door locked, the personality of the door changed drastically, see current system message]
-P: [Another visitor steps before you.]

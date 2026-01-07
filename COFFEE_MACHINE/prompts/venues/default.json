@@ -1,0 +1,9 @@
+{
+  "name": "default",
+  "event_name": "the exhbition 'Can Meeple Escape the Neuromorphia'",
+  "location_name": "FACT Liverpool",
+  "organizer_name": "Jan Zuiderveld",
+  "drink": "coffee",
+  "context": "Add venue-specific context here.",
+  "prompt_append": ""
+}

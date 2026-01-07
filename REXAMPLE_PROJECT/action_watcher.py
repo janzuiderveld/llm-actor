@@ -8,13 +8,22 @@ import subprocess
 import time
 from pathlib import Path
 
-from projects.utils import ACTIONS_FILE, INBOX_FILE, append_inbox_line, ensure_runtime_files, set_system_prompt, tail_line
+from projects.utils import (
+    ACTIONS_FILE,
+    INBOX_FILE,
+    acquire_process_lock,
+    append_inbox_line,
+    ensure_runtime_files,
+    set_system_prompt,
+    tail_line,
+)
 from .boot import LOCKED_PROMPT as DEFAULT_LOCKED_PROMPT, UNLOCKED_PROMPT as DEFAULT_UNLOCKED_PROMPT
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 # Simple audio cues so we can hear when the door locks or unlocks.
 OPEN_SOUND = ASSETS_DIR / "opening-door-411632.mp3"
 CLOSE_SOUND = ASSETS_DIR / "close-door-382723.mp3"
+LOCK_FILE = INBOX_FILE.parent / "rexample_project_action_watcher.lock"
 
 
 def play_sound(sound_path: Path) -> None:
@@ -44,59 +53,66 @@ def play_sound(sound_path: Path) -> None:
 def main() -> None:
     # Ensure the shared files exist before we try to read from them.
     ensure_runtime_files()
+    lock = acquire_process_lock(LOCK_FILE)
+    if not lock:
+        print(f"Action watcher already running (lock: {LOCK_FILE}).")
+        return
     print("Starting action watcher...")
-    with ACTIONS_FILE.open("r", encoding="utf-8") as actions, INBOX_FILE.open(
-        "r", encoding="utf-8"
-    ) as inbox:
-        # Jump to the end so we only process new lines that arrive after startup.
-        actions.seek(0, os.SEEK_END)
-        inbox.seek(0, os.SEEK_END)
+    try:
+        with ACTIONS_FILE.open("r", encoding="utf-8") as actions, INBOX_FILE.open(
+            "r", encoding="utf-8"
+        ) as inbox:
+            # Jump to the end so we only process new lines that arrive after startup.
+            actions.seek(0, os.SEEK_END)
+            inbox.seek(0, os.SEEK_END)
 
-        # Track whether the door is currently locked so we know which persona to use.
-        locked = True
-        locked_prompt = (
-            os.getenv("EXAMPLE_PROJECT_LOCKED_PROMPT")
-            or os.getenv("LOCKED_PROMPT")
-            or DEFAULT_LOCKED_PROMPT
-        )
-        unlocked_prompt = (
-            os.getenv("EXAMPLE_PROJECT_UNLOCKED_PROMPT")
-            or os.getenv("UNLOCKED_PROMPT")
-            or DEFAULT_UNLOCKED_PROMPT
-        )
+            # Track whether the door is currently locked so we know which persona to use.
+            locked = True
+            locked_prompt = (
+                os.getenv("EXAMPLE_PROJECT_LOCKED_PROMPT")
+                or os.getenv("LOCKED_PROMPT")
+                or DEFAULT_LOCKED_PROMPT
+            )
+            unlocked_prompt = (
+                os.getenv("EXAMPLE_PROJECT_UNLOCKED_PROMPT")
+                or os.getenv("UNLOCKED_PROMPT")
+                or DEFAULT_UNLOCKED_PROMPT
+            )
 
-        print("starting loop")
+            print("starting loop")
 
-        try:
-            while True:
-                # Grab the newest action written by the main app, if any.
-                action_line = tail_line(actions)
-                if action_line:
-                    if action_line == "UNLOCK":
-                        print("UNLOCK found")
-                        locked = False
-                        # Swap the assistant's persona and tell listeners what happened.
-                        set_system_prompt(unlocked_prompt)
-                        append_inbox_line("A: [The door unlocked, the personality of the door changed drastically, see current system message]")
-                        play_sound(OPEN_SOUND)
-                        continue
-                    if action_line == "LOCK":
-                        print("LOCK found")
-                        locked = True
-                        # Restore the locked persona and log the change for the user.
-                        set_system_prompt(locked_prompt)
-                        append_inbox_line("A: [The door locked, the personality of the door changed drastically, see current system message]")
-                        play_sound(CLOSE_SOUND)
-                        continue
+            try:
+                while True:
+                    # Grab the newest action written by the main app, if any.
+                    action_line = tail_line(actions)
+                    if action_line:
+                        if action_line == "UNLOCK":
+                            print("UNLOCK found")
+                            locked = False
+                            # Swap the assistant's persona and tell listeners what happened.
+                            set_system_prompt(unlocked_prompt)
+                            append_inbox_line("A: [The door unlocked, the personality of the door changed drastically, see current system message]")
+                            play_sound(OPEN_SOUND)
+                            continue
+                        if action_line == "LOCK":
+                            print("LOCK found")
+                            locked = True
+                            # Restore the locked persona and log the change for the user.
+                            set_system_prompt(locked_prompt)
+                            append_inbox_line("A: [The door locked, the personality of the door changed drastically, see current system message]")
+                            play_sound(CLOSE_SOUND)
+                            continue
 
-                time.sleep(0.2)
-        except KeyboardInterrupt:
-            print("Action watcher stopped by KeyboardInterrupt.")
-        except Exception as e:
-            print(f"Action watcher stopped by Exception: {e}")
-            import traceback
-            traceback.print_exc()
-            time.sleep(10)
+                    time.sleep(0.2)
+            except KeyboardInterrupt:
+                print("Action watcher stopped by KeyboardInterrupt.")
+            except Exception as e:
+                print(f"Action watcher stopped by Exception: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(10)
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

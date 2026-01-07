@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pipecat.services.deepgram.tts import DeepgramTTSService
+from pipecat.services.tts_service import TTSService
 from pipecat.utils.string import SENTENCE_ENDING_PUNCTUATION, match_endofsentence
 from pipecat.utils.text.simple_text_aggregator import SimpleTextAggregator
 
-from app.config import RuntimeConfig
+from app.config import DEFAULT_TTS_PROVIDER, RuntimeConfig
+from services.macos_say_tts import MacosSayTTSService
 
 
 class QuoteAwareTextAggregator(SimpleTextAggregator):
@@ -44,3 +46,17 @@ def build_deepgram_tts(config: RuntimeConfig, api_key: str) -> DeepgramTTSServic
         sample_rate=config.tts.sample_rate,
         text_aggregator=QuoteAwareTextAggregator(),
     )
+
+
+def build_tts_service(config: RuntimeConfig, deepgram_api_key: str) -> TTSService:
+    provider = (config.tts.provider or DEFAULT_TTS_PROVIDER).strip().lower()
+    if provider in ("deepgram", "deepgram_aura", "deepgram-aura"):
+        return build_deepgram_tts(config, deepgram_api_key)
+    if provider in ("macos_say", "macos-say", "say"):
+        return MacosSayTTSService(
+            voice=config.tts.say_voice,
+            rate_wpm=config.tts.say_rate_wpm,
+            audio_device=config.tts.say_audio_device,
+            interactive=config.tts.say_interactive,
+        )
+    raise ValueError(f"Unknown TTS provider: {config.tts.provider!r}")

@@ -9,7 +9,7 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Union
 
 from app.config import CONFIG_PATH, ConfigManager, load_or_initialize_runtime_config
 
@@ -43,6 +43,67 @@ class ProjectConfig:
         }
         metadata = {key: value for key, value in data.items() if key != "runtime"}
         return cls(runtime_overrides=runtime_overrides, metadata=dict(metadata))
+
+
+@dataclass(slots=True)
+class LockFile:
+    """Tracks a simple PID-based lock file."""
+
+    path: Path
+
+    def release(self) -> None:
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _read_lock_pid(lock_path: Path) -> Optional[int]:
+    try:
+        raw = lock_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _is_process_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def acquire_process_lock(lock_path: Path) -> Optional[LockFile]:
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    for _ in range(2):
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            pid = _read_lock_pid(lock_path)
+            if pid is None or not _is_process_alive(pid):
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            return None
+        else:
+            with os.fdopen(fd, "w") as handle:
+                handle.write(str(os.getpid()))
+            return LockFile(lock_path)
+    return None
 
 
 def load_project_config(project_dir: Path, filename: str = _DEFAULT_CONFIG_FILENAME) -> ProjectConfig:
@@ -99,10 +160,17 @@ def apply_runtime_config_overrides(overrides: Mapping[str, Mapping[str, Any]], c
     manager = ConfigManager(path=config_path)
     current = manager.config
     audio_updates = _filtered_section(overrides.get("audio", {}), current.audio)
+    pipeline_updates = _filtered_section(overrides.get("pipeline", {}), current.pipeline)
     stt_updates = _filtered_section(overrides.get("stt", {}), current.stt)
     llm_updates = _filtered_section(overrides.get("llm", {}), current.llm)
     tts_updates = _filtered_section(overrides.get("tts", {}), current.tts)
-    manager.apply_updates(audio=audio_updates, stt=stt_updates, llm=llm_updates, tts=tts_updates)
+    manager.apply_updates(
+        audio=audio_updates,
+        pipeline=pipeline_updates,
+        stt=stt_updates,
+        llm=llm_updates,
+        tts=tts_updates,
+    )
 
 
 def append_json_line(path: Path, payload: Mapping[str, Any]) -> None:
@@ -134,7 +202,18 @@ def tail_line(handle) -> Optional[str]:
     """Read the next line from an open file handle, returning a stripped string."""
     line = handle.readline()
     if not line:
-        return None
+        try:
+            current_pos = handle.tell()
+            size = os.fstat(handle.fileno()).st_size
+        except OSError:
+            return None
+        if size < current_pos:
+            handle.seek(0, os.SEEK_SET)
+            line = handle.readline()
+            if not line:
+                return None
+        else:
+            return None
     return line.strip()
 
 
@@ -231,7 +310,7 @@ class TerminalSessionHandle:
             pass
 
 
-ProcessHandle = subprocess.Popen | TerminalSessionHandle
+ProcessHandle = Union[subprocess.Popen, TerminalSessionHandle]
 
 
 def _escape_applescript(text: str) -> str:

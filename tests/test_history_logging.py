@@ -130,3 +130,34 @@ def test_assistant_replacement_dedupes_logged_content(tmp_path):
     transcript_lines = [json.loads(line) for line in transcript_path.read_text().splitlines()]
     assert transcript_lines[-1]["replace"] is True
     assert transcript_lines[-1]["content"] == expected
+
+
+def test_assistant_replacement_updates_in_progress_entry_order(tmp_path):
+    transcript_path = tmp_path / "transcript.jsonl"
+    clean_path = tmp_path / "transcript.llm.jsonl"
+
+    history = ConversationHistory(
+        transcript_path,
+        clean_transcript_path=clean_path,
+    )
+
+    history.add_partial("assistant", "I am a coffee machine designed to produce")
+    history.add("user", "Stop.")
+    history.add(
+        "assistant",
+        "I am a coffee machine designed to produce various coffee beverages upon [.. cut off by user utterance]",
+        replace_last=True,
+    )
+
+    clean_lines = [json.loads(line) for line in clean_path.read_text().splitlines()]
+    assert clean_lines == [
+        {
+            "role": "assistant",
+            "content": "I am a coffee machine designed to produce various coffee beverages upon [.. cut off by user utterance]",
+        },
+        {"role": "user", "content": "Stop."},
+    ]
+
+    transcript_lines = [json.loads(line) for line in transcript_path.read_text().splitlines()]
+    assert transcript_lines[-1]["replace"] is True
+    assert "partial" in transcript_lines[0]

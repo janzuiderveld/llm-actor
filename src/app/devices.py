@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import json
+import sys
 from dataclasses import dataclass
-from typing import List, Optional
+from pathlib import Path
+from typing import Callable, List, Optional
 
 from .config import ConfigManager, detect_default_audio_device_indices
+
+PREFERENCES_FILENAME = "audio_device_preferences.json"
 
 
 @dataclass
@@ -67,25 +72,222 @@ def list_devices() -> List[DeviceInfo]:
     return devices
 
 
-def ensure_devices_selected(config_manager: ConfigManager) -> None:
+@dataclass(frozen=True, slots=True)
+class AudioDevicePreferences:
+    input_device_name: str
+    output_device_name: str
+
+    def as_dict(self) -> dict:
+        return {
+            "input_device_name": self.input_device_name,
+            "output_device_name": self.output_device_name,
+        }
+
+
+def _default_preferences_path(config_manager: ConfigManager) -> Path:
+    return config_manager.path.parent / PREFERENCES_FILENAME
+
+
+def load_audio_device_preferences(path: Path) -> Optional[AudioDevicePreferences]:
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    input_name = raw.get("input_device_name")
+    output_name = raw.get("output_device_name")
+    if not isinstance(input_name, str) or not input_name.strip():
+        return None
+    if not isinstance(output_name, str) or not output_name.strip():
+        return None
+    return AudioDevicePreferences(input_device_name=input_name, output_device_name=output_name)
+
+
+def save_audio_device_preferences(preferences: AudioDevicePreferences, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(preferences.as_dict(), indent=2), encoding="utf-8")
+
+
+def _resolve_device_index_by_name(
+    devices: List[DeviceInfo],
+    device_name: str,
+    *,
+    require_input: bool,
+) -> Optional[int]:
+    def is_valid(device: DeviceInfo) -> bool:
+        if require_input:
+            return device.max_input_channels > 0
+        return device.max_output_channels > 0
+
+    exact = [device for device in devices if device.name == device_name and is_valid(device)]
+    if exact:
+        return exact[0].index
+
+    lowered = device_name.casefold()
+    casefold_matches = [device for device in devices if device.name.casefold() == lowered and is_valid(device)]
+    if casefold_matches:
+        return casefold_matches[0].index
+
+    return None
+
+
+def apply_audio_device_preferences(
+    config_manager: ConfigManager,
+    preferences: AudioDevicePreferences,
+    *,
+    devices: Optional[List[DeviceInfo]] = None,
+) -> None:
+    resolved_devices = list_devices() if devices is None else devices
+    input_index = _resolve_device_index_by_name(
+        resolved_devices,
+        preferences.input_device_name,
+        require_input=True,
+    )
+    output_index = _resolve_device_index_by_name(
+        resolved_devices,
+        preferences.output_device_name,
+        require_input=False,
+    )
+    if input_index is None or output_index is None:
+        missing = []
+        if input_index is None:
+            missing.append(f"input '{preferences.input_device_name}'")
+        if output_index is None:
+            missing.append(f"output '{preferences.output_device_name}'")
+        raise RuntimeError("Could not match saved audio device preferences: " + ", ".join(missing))
+
+    config_manager.apply_updates(
+        audio={
+            "input_device_index": input_index,
+            "output_device_index": output_index,
+            "auto_select_devices": False,
+        }
+    )
+
+
+def prompt_for_audio_device_preferences(
+    *,
+    devices: Optional[List[DeviceInfo]] = None,
+    input_fn: Callable[[str], str] = input,
+    print_fn: Callable[[str], None] = print,
+) -> AudioDevicePreferences:
+    resolved_devices = list_devices() if devices is None else devices
+    if not resolved_devices:
+        raise RuntimeError("No audio devices found. Ensure PortAudio is installed and devices are available.")
+
+    print_fn("Available audio devices:")
+    for device in resolved_devices:
+        print_fn(
+            f"  {device.index}: {device.name} (in:{device.max_input_channels} out:{device.max_output_channels})"
+        )
+    print_fn("")
+
+    input_devices = {device.index: device for device in resolved_devices if device.max_input_channels > 0}
+    output_devices = {device.index: device for device in resolved_devices if device.max_output_channels > 0}
+    if not input_devices:
+        raise RuntimeError("No input-capable audio devices found.")
+    if not output_devices:
+        raise RuntimeError("No output-capable audio devices found.")
+
+    def prompt_index(prompt: str, choices: dict[int, DeviceInfo]) -> DeviceInfo:
+        while True:
+            raw = input_fn(prompt).strip()
+            try:
+                idx = int(raw)
+            except ValueError:
+                print_fn("Please enter a valid integer device index.")
+                continue
+            selected = choices.get(idx)
+            if selected is None:
+                print_fn("Please choose one of the listed device indices.")
+                continue
+            return selected
+
+    input_device = prompt_index("Select input device index (microphone): ", input_devices)
+    output_device = prompt_index("Select output device index (speaker): ", output_devices)
+
+    return AudioDevicePreferences(
+        input_device_name=input_device.name,
+        output_device_name=output_device.name,
+    )
+
+
+def ensure_audio_device_preferences(
+    config_manager: ConfigManager,
+    *,
+    preferences_path: Optional[Path] = None,
+    devices: Optional[List[DeviceInfo]] = None,
+    interactive: Optional[bool] = None,
+    input_fn: Callable[[str], str] = input,
+    print_fn: Callable[[str], None] = print,
+) -> Optional[AudioDevicePreferences]:
+    """Ensure audio device preferences exist and are applied to runtime config.
+
+    - If preferences file exists, resolve device indices by name and apply them.
+    - If missing and interactive, prompt the user to select devices and persist by name.
+    - If missing and not interactive, leave selection to other mechanisms (auto-select or manual indices).
+    """
+    path = _default_preferences_path(config_manager) if preferences_path is None else preferences_path
+    if interactive is None:
+        try:
+            interactive = sys.stdin.isatty()
+        except Exception:  # pragma: no cover - defensive
+            interactive = False
+
+    preferences = load_audio_device_preferences(path)
+    resolved_devices = list_devices() if devices is None else devices
+
+    if preferences is not None:
+        try:
+            apply_audio_device_preferences(config_manager, preferences, devices=resolved_devices)
+            return preferences
+        except RuntimeError:
+            if not interactive:
+                raise
+            print_fn(f"Saved audio device preferences at {path} could not be resolved. Re-selecting devices.")
+
+    if not interactive:
+        return None
+
+    preferences = prompt_for_audio_device_preferences(
+        devices=resolved_devices,
+        input_fn=input_fn,
+        print_fn=print_fn,
+    )
+    save_audio_device_preferences(preferences, path)
+    apply_audio_device_preferences(config_manager, preferences, devices=resolved_devices)
+    return preferences
+
+
+def ensure_devices_selected(
+    config_manager: ConfigManager,
+    *,
+    require_input: bool = True,
+    require_output: bool = True,
+) -> None:
     cfg = config_manager.config
-    if cfg.audio.input_device_index is not None and cfg.audio.output_device_index is not None:
+    has_input = cfg.audio.input_device_index is not None
+    has_output = cfg.audio.output_device_index is not None
+    if (not require_input or has_input) and (not require_output or has_output):
         return
 
     input_index, output_index = detect_default_audio_device_indices()
 
     updates: dict[str, int] = {}
-    if cfg.audio.input_device_index is None and input_index is not None:
+    if require_input and cfg.audio.input_device_index is None and input_index is not None:
         updates["input_device_index"] = input_index
-    if cfg.audio.output_device_index is None and output_index is not None:
+    if require_output and cfg.audio.output_device_index is None and output_index is not None:
         updates["output_device_index"] = output_index
 
     if updates:
         config_manager.apply_updates(audio=updates)
 
     if (
-        config_manager.config.audio.input_device_index is None
-        or config_manager.config.audio.output_device_index is None
+        (require_input and config_manager.config.audio.input_device_index is None)
+        or (require_output and config_manager.config.audio.output_device_index is None)
     ):
         try:
             import sounddevice  # type: ignore  # noqa: F401
@@ -98,6 +300,6 @@ def ensure_devices_selected(config_manager: ConfigManager) -> None:
             hint = "Verify PortAudio can enumerate devices via `python -m sounddevice`."
         raise RuntimeError(
             "Unable to detect system default audio devices automatically. "
-            "Set `audio.input_device_index` and `audio.output_device_index` manually in runtime/config.json. "
+            "Set the missing `audio.*_device_index` values manually in runtime/config.json. "
             f"{hint}"
         )

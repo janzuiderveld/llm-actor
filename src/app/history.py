@@ -22,6 +22,7 @@ class HistoryEntry:
     role: str
     content: str = ""
     chunks: list[str] = field(default_factory=list)
+    in_progress: bool = False
 
     def as_dict(self) -> Dict[str, str]:
         return {"role": self.role, "content": self.content}
@@ -152,16 +153,27 @@ class ConversationHistory:
             return
 
         replaced = False
-        if replace_last and self._buffer and self._buffer[-1].role == role:
-            entry = self._buffer[-1]
+        entry: HistoryEntry | None = None
+
+        if replace_last:
+            entry = self._find_in_progress_entry(role)
+            if entry is None and self._buffer and self._buffer[-1].role == role:
+                entry = self._buffer[-1]
+
+        if entry is not None:
             content = entry.replace_last_chunk(content)
             replaced = True
+            entry.in_progress = False
             if not content:
-                self._buffer.pop()
+                if self._buffer and self._buffer[-1] is entry:
+                    self._buffer.pop()
+                else:
+                    self._buffer.remove(entry)
                 return
         else:
             entry = HistoryEntry(role=role)
             entry.append_chunk(content)
+            entry.in_progress = False
             self._buffer.append(entry)
 
         record = {
@@ -173,6 +185,10 @@ class ConversationHistory:
             record["replace"] = True
         self._transcript.append(record)
         self._write_clean_transcript()
+
+    @property
+    def system_message(self) -> Optional[str]:
+        return self._system_message
 
     def set_system_message(self, prompt: Optional[str]) -> None:
         if prompt == self._system_message:
@@ -195,11 +211,14 @@ class ConversationHistory:
         if not content:
             return
 
-        if self._buffer and self._buffer[-1].role == role:
-            entry = self._buffer[-1]
-        else:
-            entry = HistoryEntry(role=role)
-            self._buffer.append(entry)
+        entry = self._find_in_progress_entry(role)
+        if entry is None:
+            if self._buffer and self._buffer[-1].role == role:
+                entry = self._buffer[-1]
+            else:
+                entry = HistoryEntry(role=role)
+                entry.in_progress = True
+                self._buffer.append(entry)
 
         delta = self._extract_partial_delta(entry.content, content)
         if not delta:
@@ -207,6 +226,7 @@ class ConversationHistory:
 
         for chunk in self._split_partial_content(delta):
             entry.append_chunk(chunk)
+            entry.in_progress = True
 
             self._transcript.append({
                 "ts": time.time(),
@@ -214,6 +234,12 @@ class ConversationHistory:
                 "content": chunk,
                 "partial": True,
             })
+
+    def _find_in_progress_entry(self, role: str) -> Optional[HistoryEntry]:
+        for candidate in reversed(self._buffer):
+            if candidate.role == role and candidate.in_progress:
+                return candidate
+        return None
 
     @staticmethod
     def _extract_partial_delta(existing: str, new_text: str) -> str:

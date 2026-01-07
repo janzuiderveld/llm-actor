@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -13,12 +14,24 @@ load_dotenv()
 CONFIG_PATH = Path("runtime/config.json")
 CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+DEFAULT_TTS_PROVIDER = "macos_say" if sys.platform == "darwin" else "deepgram"
+
 
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     value = os.getenv(name)
     if value is None:
         return default
     return value
+
+
+def _env_float(name: str, default: Optional[float] = None) -> Optional[float]:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
 
 def _normalize_device_index(value: Any) -> Optional[int]:
@@ -110,12 +123,28 @@ class AudioConfig:
 
 
 @dataclass
+class PipelineConfig:
+    idle_timeout_secs: Optional[float] = 300
+    cancel_on_idle_timeout: bool = True
+    pause_stt_on_idle: bool = False
+    history_on_idle: str = "keep"
+    max_history_messages: int = 50
+
+
+@dataclass
 class STTConfig:
     model: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_STT_MODEL", "flux-general-en"))
     language: str = "en-US"
     eager_eot_threshold: float = 0.5
     eot_threshold: float = 0.85
     eot_timeout_ms: int = 1500
+    # macOS `hear` backend settings (used when model == "macos-hear")
+    hear_on_device: bool = True
+    hear_punctuation: bool = True
+    hear_input_device_id: Optional[int] = None
+    hear_final_silence_sec: float = 1.2
+    hear_restart_on_final: bool = True
+    hear_keep_mic_open: bool = False
 
 
 @dataclass
@@ -123,6 +152,10 @@ class LLMConfig:
     model: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_LLM_MODEL", "gemini-2.5-flash"))
     temperature: float = 0.6
     max_tokens: int = 1024
+    thinking_level: Optional[str] = field(default_factory=lambda: _env("PIPECAT_GEMINI_THINKING_LEVEL"))
+    request_timeout_s: Optional[float] = field(
+        default_factory=lambda: _env_float("PIPECAT_LLM_REQUEST_TIMEOUT_S", 30.0)
+    )
     system_prompt: str = (
         "You are a real-time voice assistant. Speak concisely.\n"
         "To request external actions, include them inside <...> within your reply. "
@@ -132,14 +165,23 @@ class LLMConfig:
 
 @dataclass
 class TTSConfig:
+    provider: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_TTS_PROVIDER", DEFAULT_TTS_PROVIDER))
     voice: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_VOICE", "aura-2-thalia-en"))
     encoding: str = "linear16"
     sample_rate: int = 24000
+    cutoff_marker: str = field(default_factory=lambda: _env("PIPECAT_TTS_CUTOFF_MARKER", "[.. cut off by user utterance]") or "[.. cut off by user utterance]")
+
+    # macOS `say` backend settings (used when provider == "macos_say")
+    say_voice: Optional[str] = field(default_factory=lambda: _env("PIPECAT_SAY_VOICE"))
+    say_rate_wpm: Optional[int] = None
+    say_audio_device: Optional[str] = None
+    say_interactive: bool = True
 
 
 @dataclass
 class RuntimeConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)
+    pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     stt: STTConfig = field(default_factory=STTConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
@@ -160,6 +202,7 @@ def load_or_initialize_runtime_config(path: Path = CONFIG_PATH) -> RuntimeConfig
     if data:
         config = RuntimeConfig(
             audio=AudioConfig(**data.get("audio", {})),
+            pipeline=PipelineConfig(**data.get("pipeline", {})),
             stt=STTConfig(**data.get("stt", {})),
             llm=LLMConfig(**data.get("llm", {})),
             tts=TTSConfig(**data.get("tts", {})),
@@ -168,6 +211,48 @@ def load_or_initialize_runtime_config(path: Path = CONFIG_PATH) -> RuntimeConfig
         config = RuntimeConfig()
 
     updated = False
+    pipeline_payload = data.get("pipeline")
+    if isinstance(pipeline_payload, dict):
+        required_keys = {
+            "idle_timeout_secs",
+            "cancel_on_idle_timeout",
+            "pause_stt_on_idle",
+            "history_on_idle",
+            "max_history_messages",
+        }
+        if not required_keys.issubset(pipeline_payload.keys()):
+            updated = True
+    elif data:
+        updated = True
+    stt_payload = data.get("stt")
+    if isinstance(stt_payload, dict):
+        required_keys = {
+            "hear_on_device",
+            "hear_punctuation",
+            "hear_input_device_id",
+            "hear_final_silence_sec",
+            "hear_restart_on_final",
+            "hear_keep_mic_open",
+        }
+        if not required_keys.issubset(stt_payload.keys()):
+            updated = True
+    tts_payload = data.get("tts")
+    if isinstance(tts_payload, dict):
+        required_keys = {
+            "provider",
+            "cutoff_marker",
+            "say_voice",
+            "say_rate_wpm",
+            "say_audio_device",
+            "say_interactive",
+        }
+        if not required_keys.issubset(tts_payload.keys()):
+            updated = True
+    llm_payload = data.get("llm")
+    if isinstance(llm_payload, dict):
+        required_keys = {"request_timeout_s", "thinking_level"}
+        if not required_keys.issubset(llm_payload.keys()):
+            updated = True
 
     if config.audio.auto_select_devices:
         input_index, output_index = detect_default_audio_device_indices()
@@ -212,7 +297,8 @@ class ConfigManager:
         self.save()
 
     def apply_updates(self, *, stt: Optional[Dict[str, Any]] = None, llm: Optional[Dict[str, Any]] = None,
-                      tts: Optional[Dict[str, Any]] = None, audio: Optional[Dict[str, Any]] = None) -> None:
+                      tts: Optional[Dict[str, Any]] = None, audio: Optional[Dict[str, Any]] = None,
+                      pipeline: Optional[Dict[str, Any]] = None) -> None:
         if stt:
             for key, value in stt.items():
                 if hasattr(self._config.stt, key):
@@ -229,11 +315,16 @@ class ConfigManager:
             for key, value in audio.items():
                 if hasattr(self._config.audio, key):
                     setattr(self._config.audio, key, value)
+        if pipeline:
+            for key, value in pipeline.items():
+                if hasattr(self._config.pipeline, key):
+                    setattr(self._config.pipeline, key, value)
         self.save()
 
 
 def get_api_keys() -> Dict[str, Optional[str]]:
     return {
         "google": _env("GOOGLE_API_KEY"),
+        "openai": _env("OPENAI_API_KEY"),
         "deepgram": _env("DEEPGRAM_API_KEY"),
     }
