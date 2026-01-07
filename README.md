@@ -1,5 +1,7 @@
 # llm-actor
 
+This repository installs as the Python package `pipecat-thin` (distribution name), even though the repo is named `llm-actor`.
+
 This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai/) to deliver a real-time audio loop using Deepgram Flux *or macOS `hear`* speech-to-text, Gemini 2.5 Flash, OpenAI, *or local Ollama* streaming text generation, and Deepgram Aura-2 *or macOS `say`* text-to-speech. External automation hooks are exposed via append-only files under `runtime/`.
 
 ## Features

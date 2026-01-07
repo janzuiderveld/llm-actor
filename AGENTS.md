@@ -24,6 +24,7 @@ Always update the README.md and AGENTS.md files to reflect the changes you make.
 
 - `pyproject.toml` pins the direct runtime dependencies.
 - `requirements.lock` captures the full reference environment; refresh with `pip freeze` when the venv changes.
+- The distribution name for installs is `pipecat-thin` (repo name remains `llm-actor`).
 
 Action extraction updates that affect transcript/TTs behavior should be covered in `tests/test_action_extractor_filter.py`, `tests/test_reasoning_trace_filter.py`, and `tests/test_macos_say_tts.py`.
 Action extraction suppresses action-adjacent commas/colons/semicolons in spoken output to avoid TTS reading stray punctuation.

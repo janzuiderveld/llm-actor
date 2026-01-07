@@ -41,7 +41,7 @@
     "cutoff_marker": "[.. cut off by user utterance]",
     "say_voice": null,
     "say_rate_wpm": null,
-    "say_audio_device": "173",
+    "say_audio_device": null,
     "say_interactive": true
   }
 }
