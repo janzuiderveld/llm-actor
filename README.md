@@ -46,7 +46,7 @@ Follow these steps to run the door project end-to-end:
    ```
 
    Reactivate the virtual environment with `source .venv/bin/activate` (Mac/Linux) or `.venv\Scripts\activate` (Windows) whenever you open a new terminal for this project.
-   Dependencies are pinned in `pyproject.toml` to match the reference environment (including `pyserial` for Arduino support).
+   Direct dependencies are pinned in `pyproject.toml` (including `pyserial` for Arduino support). For a full environment replica, install from `requirements.lock` instead.
 
 2. **Add credentials and defaults**
 
