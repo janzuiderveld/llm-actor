@@ -76,6 +76,7 @@ def test_pipeline_config_defaults() -> None:
     assert config.pipeline.idle_timeout_secs == 300
     assert config.pipeline.cancel_on_idle_timeout is True
     assert config.pipeline.pause_stt_on_idle is False
+    assert config.pipeline.start_stt_muted is False
     assert config.pipeline.history_on_idle == "keep"
     assert config.pipeline.max_history_messages == 50
     assert config.llm.request_timeout_s == 30.0
@@ -103,6 +104,7 @@ def test_apply_runtime_config_overrides_updates_pipeline(tmp_path: Path) -> None
                 "idle_timeout_secs": 12,
                 "cancel_on_idle_timeout": False,
                 "pause_stt_on_idle": True,
+                "start_stt_muted": True,
                 "history_on_idle": "reset",
                 "max_history_messages": 12,
             }
@@ -114,6 +116,7 @@ def test_apply_runtime_config_overrides_updates_pipeline(tmp_path: Path) -> None
     assert updated.idle_timeout_secs == 12
     assert updated.cancel_on_idle_timeout is False
     assert updated.pause_stt_on_idle is True
+    assert updated.start_stt_muted is True
     assert updated.history_on_idle == "reset"
     assert updated.max_history_messages == 12
 
@@ -347,7 +350,11 @@ def test_build_pipeline_does_not_gate_stt(monkeypatch: pytest.MonkeyPatch, tmp_p
 
             return decorator
 
-    monkeypatch.setattr(pipeline_module, "get_api_keys", lambda: {"deepgram": "key", "google": "", "openai": ""})
+    monkeypatch.setattr(
+        pipeline_module,
+        "get_api_keys",
+        lambda: {"deepgram": "key", "google": "", "openai": "", "anthropic": ""},
+    )
     monkeypatch.setattr(
         pipeline_module,
         "build_stt_service",
@@ -356,7 +363,7 @@ def test_build_pipeline_does_not_gate_stt(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(
         pipeline_module,
         "build_llm_service",
-        lambda config, google_api_key, openai_api_key: (DummyLLM(), "dummy"),
+        lambda config, google_api_key, anthropic_api_key, openai_api_key: (DummyLLM(), "dummy"),
     )
     monkeypatch.setattr(pipeline_module, "build_tts_service", lambda config, deepgram_key: object())
     monkeypatch.setattr(pipeline_module, "ensure_devices_selected", lambda *args, **kwargs: None)

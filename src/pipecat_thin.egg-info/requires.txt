@@ -1,9 +1,11 @@
-pipecat-ai[deepgram,google,local]
-python-dotenv
-pydantic
-sounddevice>=0.4
-typer>=0.9
-watchfiles
+pipecat-ai[anthropic,deepgram,google,local]==0.0.91
+python-dotenv==1.1.1
+pydantic==2.12.3
+sounddevice==0.5.3
+typer==0.20.0
+watchfiles==1.1.1
+pyserial==3.5
 
 [test]
-pytest
+pytest==9.0.2
+pytest-asyncio==1.3.0

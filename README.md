@@ -7,6 +7,7 @@ This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai
 ## Features
 
 * Deepgram Flux or macOS `hear` STT → LLM → Deepgram Aura-2 or macOS `say` TTS pipeline, fully streaming.
+* Optional Anthropic Claude LLM via `llm.model` set to `anthropic-{MODEL_ID}` (for example `anthropic-claude-3-5-sonnet-20241022`).
 * Optional OpenAI LLM via `llm.model` set to `openai-{MODEL_ID}` (for example `openai-gpt-5.2-chat-latest`).
 * Optional local LLM via Ollama by setting `llm.model` to `ollama-{MODEL_ID}` (for example `ollama-gemma3:4b`).
   * Models that emit hidden reasoning traces like `<think>...</think>` have those traces stripped before action parsing, TTS, and history logging.
@@ -20,6 +21,7 @@ This project packages a thin Python CLI around [Pipecat](https://docs.pipecat.ai
 * [Python 3.10](https://www.python.org/downloads/) or newer (3.11 recommended as it's the version that this is tested on).
 * [Deepgram](https://developers.deepgram.com/reference/deepgram-api-overview) API credentials (required when using Deepgram STT/TTS).
 * For Gemini models: [Google API](https://ai.google.dev/gemini-api/docs/api-key) credentials with access to Gemini 2.5 Flash.
+* For Anthropic models: an `ANTHROPIC_API_KEY` with access to your chosen Claude model.
 * For OpenAI models: an `OPENAI_API_KEY` with access to your chosen model.
 * For Ollama models: a local Ollama server running on `http://localhost:11434` with the model pulled.
 * For macOS `hear`: the `hear` binary on PATH plus Speech Recognition permissions granted to your terminal.
@@ -62,7 +64,7 @@ Follow these steps to run the door project end-to-end:
    copy .env.example .env
    ```
 
-   Open `.env` in your editor and fill in `DEEPGRAM_API_KEY` (plus `GOOGLE_API_KEY` for Gemini or `OPENAI_API_KEY` for OpenAI), along with any optional defaults (LLM, STT, voice) you want to preload. Save the file before continuing.
+   Open `.env` in your editor and fill in `DEEPGRAM_API_KEY` (plus `GOOGLE_API_KEY` for Gemini, `ANTHROPIC_API_KEY` for Claude, or `OPENAI_API_KEY` for OpenAI), along with any optional defaults (LLM, STT, voice) you want to preload. Save the file before continuing.
 
 4. **Launch the example project**
 
@@ -98,9 +100,9 @@ The repository also includes a minimal **COFFEE_MACHINE** project that reacts to
    python COFFEE_MACHINE/boot.py
    ```
 
-   This project pins `llm.model` to `gemini-3-flash-preview`, sets Gemini `llm.thinking_level` to `MINIMAL`, and pins `tts.provider` to `macos_say` (adjust `COFFEE_MACHINE/boot.py` if you use different devices/models). It also disables idle shutdown, pauses STT when idle so the loop stays alive between button presses, and resets the conversation history after each idle timeout so each press starts fresh.
+   This project pins `llm.model` to `gemini-3-flash-preview`, sets Gemini `llm.thinking_level` to `MINIMAL`, and pins `tts.provider` to `macos_say` (adjust `COFFEE_MACHINE/boot.py` if you use different devices/models). It also disables idle shutdown, starts in listening mode, pauses STT on idle (so it stops listening after inactivity), and resets the conversation history after each idle timeout so each press starts fresh.
 
-   If an Arduino is connected, the boot process also starts `COFFEE_MACHINE/arduino_bridge.py`. Install `pyserial` in your virtual environment to enable this (`.venv/bin/pip install pyserial`). The bridge auto-detects `/dev/tty*` ports containing `usbmodem` or `usbserial`, appends mapped button presses into `runtime/coffee_machine_buttons.txt`, and watches `runtime/coffee_machine_commands.txt` to send the make-coffee serial sequence when `<Make_Coffee>` appears.
+   If an Arduino is connected, the boot process also starts `COFFEE_MACHINE/arduino_bridge.py`. Install `pyserial` in your virtual environment to enable this (`.venv/bin/pip install pyserial`). The bridge auto-detects `/dev/tty*` ports containing `usbmodem` or `usbserial`, appends mapped button presses into `runtime/coffee_machine_buttons.txt`, and watches `runtime/coffee_machine_commands.txt` to send the make-coffee serial sequence when `<Make_Coffee>` appears. Button press lines use the `[VISITOR PUSHED ... BUTTON]` wording and are forwarded into `runtime/inbox.txt` as `P: [ButtonPress] ...`.
 
    To swap the venue-specific system prompt, copy `COFFEE_MACHINE/prompts/venues/default.json`, edit the fields (and optionally `prompt_append`, `prompt_template`, or `template_name`), then launch with either:
 
@@ -214,6 +216,7 @@ The pipeline uses Pipecat's idle monitor (default 300 seconds). Configure it in 
     "idle_timeout_secs": 300,
     "cancel_on_idle_timeout": true,
     "pause_stt_on_idle": false,
+    "start_stt_muted": false,
     "history_on_idle": "keep",
     "max_history_messages": 50
   }
@@ -223,6 +226,7 @@ The pipeline uses Pipecat's idle monitor (default 300 seconds). Configure it in 
 - Set `idle_timeout_secs` to `null` (or `0`) to disable idle monitoring entirely.
 - Set `cancel_on_idle_timeout` to `false` to keep the script running indefinitely.
 - Set `pause_stt_on_idle` to `true` to mute STT when idle; STT resumes when a new line is pushed into `runtime/inbox.txt` (which is what the coffee machine watcher writes).
+- Set `start_stt_muted` to `true` if you want to begin in a muted state even when `pause_stt_on_idle` is enabled.
 - Set `history_on_idle` to `"reset"` to clear the conversation history on idle (system prompt is retained), including the in-memory LLM context. Use `"keep"` to preserve history.
 - Set `max_history_messages` to cap in-memory conversation history (older messages drop first).
 - Idle timing resets on STT/TTS activity (user speaking events, transcripts, and TTS audio frames).

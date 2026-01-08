@@ -127,6 +127,7 @@ class PipelineConfig:
     idle_timeout_secs: Optional[float] = 300
     cancel_on_idle_timeout: bool = True
     pause_stt_on_idle: bool = False
+    start_stt_muted: bool = False
     history_on_idle: str = "keep"
     max_history_messages: int = 50
 
@@ -217,6 +218,7 @@ def load_or_initialize_runtime_config(path: Path = CONFIG_PATH) -> RuntimeConfig
             "idle_timeout_secs",
             "cancel_on_idle_timeout",
             "pause_stt_on_idle",
+            "start_stt_muted",
             "history_on_idle",
             "max_history_messages",
         }
@@ -325,6 +327,7 @@ class ConfigManager:
 def get_api_keys() -> Dict[str, Optional[str]]:
     return {
         "google": _env("GOOGLE_API_KEY"),
+        "anthropic": _env("ANTHROPIC_API_KEY"),
         "openai": _env("OPENAI_API_KEY"),
         "deepgram": _env("DEEPGRAM_API_KEY"),
     }

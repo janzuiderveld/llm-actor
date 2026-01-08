@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional, Tuple, Union, cast
 
+from pipecat.services.anthropic.llm import AnthropicContextAggregatorPair, AnthropicLLMService
 from pipecat.services.google.llm import (
     GoogleContextAggregatorPair,
     GoogleLLMContext,
@@ -12,12 +13,14 @@ from pipecat.services.openai.llm import OpenAIContextAggregatorPair, OpenAILLMCo
 
 from app.config import RuntimeConfig
 
-LLMProvider = Literal["google", "ollama", "openai"]
-LLMService = Union[GoogleLLMService, OpenAILLMService]
-LLMContextPair = Union[GoogleContextAggregatorPair, OpenAIContextAggregatorPair]
+LLMProvider = Literal["google", "ollama", "openai", "anthropic"]
+LLMService = Union[AnthropicLLMService, GoogleLLMService, OpenAILLMService, OLLamaLLMService]
+LLMContextPair = Union[AnthropicContextAggregatorPair, GoogleContextAggregatorPair, OpenAIContextAggregatorPair]
 
 OLLAMA_MODEL_PREFIX = "ollama-"
 OPENAI_MODEL_PREFIX = "openai-"
+ANTHROPIC_MODEL_PREFIX = "anthropic-"
+CLAUDE_MODEL_PREFIX = "claude-"
 
 
 def parse_llm_model_spec(model: str) -> Tuple[LLMProvider, str]:
@@ -27,6 +30,10 @@ def parse_llm_model_spec(model: str) -> Tuple[LLMProvider, str]:
         return "ollama", model[len(OLLAMA_MODEL_PREFIX) :].strip()
     if lowered.startswith(OPENAI_MODEL_PREFIX):
         return "openai", model[len(OPENAI_MODEL_PREFIX) :].strip()
+    if lowered.startswith(ANTHROPIC_MODEL_PREFIX):
+        return "anthropic", model[len(ANTHROPIC_MODEL_PREFIX) :].strip()
+    if lowered.startswith(CLAUDE_MODEL_PREFIX):
+        return "anthropic", model
     return "google", model
 
 
@@ -128,6 +135,36 @@ def build_ollama_llm(config: RuntimeConfig, *, model: str, base_url: str = "http
     )
 
 
+def build_anthropic_llm(config: RuntimeConfig, *, api_key: str, model: str) -> AnthropicLLMService:
+    params = AnthropicLLMService.InputParams(
+        max_tokens=config.llm.max_tokens,
+        temperature=config.llm.temperature,
+    )
+    return AnthropicLLMService(
+        api_key=api_key,
+        model=model,
+        params=params,
+    )
+
+
+def create_anthropic_context(
+    llm_service: AnthropicLLMService, history_messages: list[dict]
+) -> AnthropicContextAggregatorPair:
+    context = OpenAILLMContext(messages=[])
+    if history_messages:
+        context.set_messages(cast(list, history_messages))
+
+    create_context = getattr(llm_service, "create_context_aggregator", None)
+    if callable(create_context):
+        return create_context(context)
+
+    legacy_create_context = getattr(llm_service, "create_context_aggregators", None)
+    if callable(legacy_create_context):
+        return legacy_create_context(context)
+
+    raise AttributeError("AnthropicLLMService does not support context aggregator creation")
+
+
 def create_openai_context(llm_service: OpenAILLMService, history_messages: list[dict]) -> OpenAIContextAggregatorPair:
     context = OpenAILLMContext(messages=[])
     if history_messages:
@@ -161,6 +198,7 @@ def build_llm_service(
     *,
     google_api_key: Optional[str],
     openai_api_key: Optional[str],
+    anthropic_api_key: Optional[str],
 ) -> Tuple[LLMService, LLMProvider]:
     provider, model_name = parse_llm_model_spec(config.llm.model)
     if provider == "ollama":
@@ -173,6 +211,12 @@ def build_llm_service(
         if not openai_api_key:
             raise RuntimeError("OPENAI_API_KEY must be set when using OpenAI models.")
         return build_openai_llm(config, api_key=openai_api_key, model=model_name), provider
+    if provider == "anthropic":
+        if not model_name:
+            raise ValueError("Anthropic model id missing; set `llm.model` to `anthropic-{MODEL_ID}`.")
+        if not anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY must be set when using Anthropic models.")
+        return build_anthropic_llm(config, api_key=anthropic_api_key, model=model_name), provider
 
     if not google_api_key:
         raise RuntimeError("GOOGLE_API_KEY must be set when using Gemini models.")
@@ -182,12 +226,18 @@ def build_llm_service(
 def create_llm_context(llm_service: LLMService, history_messages: list[dict]) -> LLMContextPair:
     if isinstance(llm_service, GoogleLLMService):
         return create_google_context(llm_service, history_messages)
+    if isinstance(llm_service, AnthropicLLMService):
+        return create_anthropic_context(llm_service, history_messages)
 
     return create_openai_context(llm_service, history_messages)
 
 
 def normalize_model_for_service(model: str, llm_service: LLMService) -> Optional[str]:
     provider, model_name = parse_llm_model_spec(model)
+    if isinstance(llm_service, AnthropicLLMService):
+        if provider == "anthropic":
+            return model_name
+        return None
     if isinstance(llm_service, OpenAILLMService):
         if provider in {"ollama", "openai"}:
             return model_name

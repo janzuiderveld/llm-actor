@@ -75,9 +75,9 @@ def test_should_skip_code_tracks_sequence() -> None:
 @pytest.mark.parametrize(
     ("code", "expected"),
     [
-        ("2", "[VISITIOR PUSHED COFFEE BUTTON]"),
-        ("7", "[VISITIOR PUSHED ESPRESSO BUTTON]"),
-        ("c", "[VISITIOR PUSHED HOT WATER BUTTON]"),
+        ("2", "[VISITOR PUSHED COFFEE BUTTON]"),
+        ("7", "[VISITOR PUSHED ESPRESSO BUTTON]"),
+        ("c", "[VISITOR PUSHED HOT WATER BUTTON]"),
     ],
 )
 def test_button_code_messages(code: str, expected: str) -> None:

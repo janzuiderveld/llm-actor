@@ -4,6 +4,7 @@ aiohappyeyeballs==2.6.1
 aiohttp==3.13.1
 aiosignal==1.4.0
 annotated-types==0.7.0
+anthropic==0.49.0
 anyio==4.11.0
 attrs==25.4.0
 cachetools==6.2.1
@@ -33,6 +34,7 @@ idna==3.11
 iniconfig==2.3.0
 jiter==0.11.1
 joblib==1.5.2
+-e git+https://github.com/janzuiderveld/llm-actor@d0d391dab1e5bb0e5e2a43c604ea4d252e09a81a#egg=llm_actor
 llvmlite==0.44.0
 loguru==0.7.3
 Markdown==3.9
@@ -48,6 +50,7 @@ openai==2.6.0
 packaging==25.0
 pillow==11.3.0
 pipecat-ai==0.0.91
+-e git+https://github.com/janzuiderveld/llm-actor@d0d391dab1e5bb0e5e2a43c604ea4d252e09a81a#egg=pipecat_thin
 pluggy==1.6.0
 propcache==0.4.1
 proto-plus==1.26.1

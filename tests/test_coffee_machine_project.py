@@ -41,6 +41,11 @@ def test_coffee_machine_resets_history_on_idle() -> None:
     assert boot.RUNTIME_CONFIG["pipeline"]["history_on_idle"] == "reset"
 
 
+def test_coffee_machine_starts_listening_and_pauses_on_idle() -> None:
+    assert boot.RUNTIME_CONFIG["pipeline"]["pause_stt_on_idle"] is True
+    assert boot.RUNTIME_CONFIG["pipeline"]["start_stt_muted"] is False
+
+
 def test_coffee_machine_thinking_level_is_minimal() -> None:
     assert boot.RUNTIME_CONFIG["llm"]["thinking_level"] == "MINIMAL"
 

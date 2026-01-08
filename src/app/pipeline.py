@@ -32,6 +32,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.llm_response import LLMAssistantAggregatorParams, LLMUserAggregatorParams
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.services.anthropic.llm import AnthropicAssistantContextAggregator, AnthropicUserContextAggregator
 from pipecat.services.google.llm import (
     Content,
     GoogleAssistantContextAggregator,
@@ -100,6 +101,26 @@ class UserAggregator(GoogleUserContextAggregator):
 
 
 class OpenAIUserAggregator(OpenAIUserContextAggregator):
+    def __init__(
+        self,
+        *args,
+        on_message: Optional[UserCallback] = None,
+        transform: Optional[Callable[[str], str]] = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._on_message = on_message
+        self._transform = transform
+
+    async def handle_aggregation(self, aggregation: str):  # type: ignore[override]
+        if self._transform:
+            aggregation = self._transform(aggregation)
+        await super().handle_aggregation(aggregation)
+        if self._on_message and aggregation:
+            await self._on_message(aggregation)
+
+
+class AnthropicUserAggregator(AnthropicUserContextAggregator):
     def __init__(
         self,
         *args,
@@ -350,6 +371,108 @@ class OpenAISpokenAssistantAggregator(OpenAIAssistantContextAggregator):
         return clean_text
 
 
+class AnthropicSpokenAssistantAggregator(AnthropicAssistantContextAggregator):
+    def __init__(
+        self,
+        *args,
+        on_message: Optional[UserCallback] = None,
+        on_partial: Optional[UserCallback] = None,
+        cutoff_marker: str = "[.. cut off by user utterance]",
+        action_state: Optional[ActionExtractionState] = None,
+        **kwargs,
+    ):
+        super().__init__(*args, enable_direct_mode=True, **kwargs)
+        self._on_message = on_message
+        self._on_partial = on_partial
+        self._cutoff_marker = cutoff_marker
+        self._interrupted = False
+        self._draft_message: dict | None = None
+        self._action_state = action_state
+
+    async def process_frame(self, frame, direction: FrameDirection):  # type: ignore[override]
+        if isinstance(frame, InterruptionFrame):
+            self._interrupted = True
+            await super().process_frame(frame, direction)
+            self._draft_message = None
+            self._interrupted = False
+            return
+        await super().process_frame(frame, direction)
+
+    async def _handle_llm_start(self, frame: LLMFullResponseStartFrame):  # type: ignore[override]
+        await super()._handle_llm_start(frame)
+        if getattr(self, "_started", 0) == 1:
+            self._draft_message = None
+
+    async def _handle_llm_end(self, frame: LLMFullResponseEndFrame):  # type: ignore[override]
+        await super()._handle_llm_end(frame)
+        if not getattr(self, "_started", 0):
+            self._draft_message = None
+
+    async def _handle_text(self, frame: TextFrame):  # type: ignore[override]
+        await super()._handle_text(frame)
+        if not getattr(self, "_started", 0):
+            return
+
+        if not frame.text or not frame.text.strip():
+            return
+
+        aggregation = getattr(self, "_aggregation", "")
+        clean_text = aggregation.strip()
+        if clean_text:
+            self._upsert_draft_message(clean_text)
+
+        if self._on_partial:
+            result = self._on_partial(aggregation)
+            if inspect.isawaitable(result):
+                await result
+
+    async def handle_aggregation(self, aggregation: str):  # type: ignore[override]
+        clean_text = aggregation.strip()
+        logged_text = self._resolve_logged_text(clean_text)
+        if not logged_text:
+            return
+        if self._interrupted and self._cutoff_marker:
+            logged_text = f"{logged_text.rstrip()} {self._cutoff_marker}"
+
+        self._upsert_draft_message(logged_text)
+
+        if self._on_message:
+            result = self._on_message(logged_text)
+            if inspect.isawaitable(result):
+                await result
+
+    def _upsert_draft_message(self, text: str) -> None:
+        message = self._draft_message
+        if message is None:
+            message = {"role": "assistant", "content": [{"type": "text", "text": text}]}
+            self._context.add_message(message)
+            self._draft_message = message
+            return
+
+        content = message.get("content")
+        if isinstance(content, list):
+            for item in content:
+                if item.get("type") == "text":
+                    item["text"] = text
+                    return
+            content.append({"type": "text", "text": text})
+            return
+        if isinstance(content, str):
+            message["content"] = [{"type": "text", "text": text}]
+            return
+        message["content"] = [{"type": "text", "text": text}]
+
+    def _resolve_logged_text(self, clean_text: str) -> str:
+        if not self._action_state:
+            return clean_text
+
+        raw_text, actions = self._action_state.snapshot()
+        raw_text = raw_text.strip()
+        if actions and raw_text:
+            return raw_text
+        return clean_text
+
+
 class AssistantSpeechGate(FrameProcessor):
     def __init__(self, release_delay: float = 0.2, **kwargs):
         super().__init__(**kwargs)
@@ -535,6 +658,7 @@ class VoicePipelineController:
         self._llm_service, llm_provider = build_llm_service(
             config,
             google_api_key=keys["google"],
+            anthropic_api_key=keys["anthropic"],
             openai_api_key=keys["openai"],
         )
         self._tts_service = build_tts_service(config, keys["deepgram"] or "")
@@ -550,7 +674,14 @@ class VoicePipelineController:
         base_user = context_pair.user()
         base_assistant = context_pair.assistant()
 
-        if llm_provider in {"ollama", "openai"}:
+        if llm_provider == "anthropic":
+            self._user_aggregator = AnthropicUserAggregator(
+                base_user.context,
+                params=getattr(base_user, "_params", LLMUserAggregatorParams()),
+                on_message=self._on_user_message,
+                transform=self._consume_inbox_buffer,
+            )
+        elif llm_provider in {"ollama", "openai"}:
             self._user_aggregator = OpenAIUserAggregator(
                 base_user.context,
                 params=getattr(base_user, "_params", LLMUserAggregatorParams()),
@@ -569,7 +700,16 @@ class VoicePipelineController:
             expect_stripped_words=provider not in ("macos_say", "macos-say", "say")
         )
         action_state = ActionExtractionState()
-        if llm_provider in {"ollama", "openai"}:
+        if llm_provider == "anthropic":
+            self._assistant_aggregator = AnthropicSpokenAssistantAggregator(
+                base_assistant.context,
+                params=assistant_params,
+                on_message=self._on_assistant_message,
+                on_partial=self._on_assistant_partial,
+                cutoff_marker=config.tts.cutoff_marker,
+                action_state=action_state,
+            )
+        elif llm_provider in {"ollama", "openai"}:
             self._assistant_aggregator = OpenAISpokenAssistantAggregator(
                 base_assistant.context,
                 params=assistant_params,
@@ -1041,6 +1181,27 @@ class VoicePipelineController:
         if hasattr(context, "system_message"):
             setattr(context, "system_message", new_prompt)
             return
+        if hasattr(context, "system"):
+            try:
+                from anthropic import NOT_GIVEN as ANTHROPIC_NOT_GIVEN
+            except Exception:
+                ANTHROPIC_NOT_GIVEN = None
+            setattr(context, "system", new_prompt if isinstance(new_prompt, str) else ANTHROPIC_NOT_GIVEN)
+            get_messages = getattr(context, "get_messages", None)
+            set_messages = getattr(context, "set_messages", None)
+            if callable(get_messages) and callable(set_messages):
+                filtered: list[object] = []
+                for message in get_messages():
+                    role = None
+                    if isinstance(message, dict):
+                        role = message.get("role")
+                    else:
+                        role = getattr(message, "role", None)
+                    if role == "system":
+                        continue
+                    filtered.append(message)
+                set_messages(filtered)
+            return
         get_messages = getattr(context, "get_messages", None)
         set_messages = getattr(context, "set_messages", None)
         if not callable(get_messages) or not callable(set_messages):
@@ -1173,7 +1334,7 @@ class VoicePipelineController:
         self._components.params_watcher.start()
         await asyncio.sleep(0)
         self._components.params_watcher.drain_pending()
-        if self._pause_stt_on_idle:
+        if self._pause_stt_on_idle and pipeline_config.start_stt_muted:
             await task.queue_frame(STTMuteFrame(mute=True))
             self._stt_muted = True
 

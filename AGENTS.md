@@ -38,6 +38,7 @@ Action extraction suppresses action-adjacent commas/colons/semicolons in spoken 
 
 - `COFFEE_MACHINE/keepalive_stability.py` randomizes cycle intervals between 1 and 20 minutes unless `--interval-seconds` is provided.
 - `COFFEE_MACHINE/boot.py` sets `pipeline.history_on_idle` to `reset` so idle timeouts clear conversation history.
+- `COFFEE_MACHINE/boot.py` starts in listening mode while still pausing STT on idle by setting `pipeline.pause_stt_on_idle` to `True` and `pipeline.start_stt_muted` to `False`.
 - `COFFEE_MACHINE/boot.py` sets `llm.thinking_level` to `MINIMAL` for Gemini models.
 - Idle history resets clear the active LLM context so the next turn starts fresh.
 
@@ -45,6 +46,7 @@ Action extraction suppresses action-adjacent commas/colons/semicolons in spoken 
 
 - `COFFEE_MACHINE/boot.py` launches `COFFEE_MACHINE/arduino_bridge.py` to connect to the Arduino.
 - The bridge appends mapped button presses to `runtime/coffee_machine_buttons.txt`.
+- Button press lines use the `[VISITOR PUSHED ... BUTTON]` wording to match the prompt templates.
 - The bridge watches `runtime/coffee_machine_commands.txt` for `<Make_Coffee>` and sends the `0/7/5/*` serial sequence.
 - `pyserial` is required for hardware IO.
 
@@ -59,6 +61,7 @@ Action extraction suppresses action-adjacent commas/colons/semicolons in spoken 
 
 ## LLM Providers
 
+- Anthropic models use `llm.model` prefixed with `anthropic-` (for example `anthropic-claude-3-5-sonnet-20241022`) and require `ANTHROPIC_API_KEY`.
 - OpenAI models use `llm.model` prefixed with `openai-` (for example `openai-gpt-5.2-chat-latest`) and require `OPENAI_API_KEY`.
 - OpenAI requests map `llm.max_tokens` to `max_completion_tokens` for newer chat models.
 - Gemini `llm.thinking_level` is applied when supported by `google-genai`; `MINIMAL` maps to `thinking_budget=0` on older versions.
