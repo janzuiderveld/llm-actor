@@ -157,7 +157,7 @@ if exist "%ASSET_DIR%\kokoro-v1.0.onnx" (
     echo Kokoro ONNX model already exists, skipping download.
 ) else (
     echo This project uses Kokoro for local text-to-speech.
-    echo You can choose between Kokoro (default) or Deepgram TTS in settings.ini later.
+    echo You can choose between Kokoro or Deepgram TTS in settings.ini later.
     echo.
     echo Downloading kokoro-v1.0.onnx...
     powershell -Command ^
