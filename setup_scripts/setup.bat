@@ -153,31 +153,38 @@ REM === DOWNLOAD KOKORO MODEL FILES ===
 
 if not exist "%ASSET_DIR%" mkdir "%ASSET_DIR%"
 
-echo This project uses Kokoro for local text-to-speech.
-echo You can choose between Kokoro (default) or Deepgram TTS in settings.ini later.
-echo.
-echo Downloading kokoro-v1.0.onnx...
-powershell -Command ^
-  "Invoke-WebRequest -Uri 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' -OutFile '%ASSET_DIR%\kokoro-v1.0.onnx'"
+if exist "%ASSET_DIR%\kokoro-v1.0.onnx" (
+    echo Kokoro ONNX model already exists, skipping download.
+) else (
+    echo This project uses Kokoro for local text-to-speech.
+    echo You can choose between Kokoro (default) or Deepgram TTS in settings.ini later.
+    echo.
+    echo Downloading kokoro-v1.0.onnx...
+    powershell -Command ^
+      "Invoke-WebRequest -Uri 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' -OutFile '%ASSET_DIR%\kokoro-v1.0.onnx'"
 
-if not exist "%ASSET_DIR%\kokoro-v1.0.onnx" (
-    echo Failed to download kokoro-v1.0.onnx
-    pause
-    exit /b 1
+    if not exist "%ASSET_DIR%\kokoro-v1.0.onnx" (
+        echo Failed to download kokoro-v1.0.onnx
+        pause
+        exit /b 1
+    )
 )
+if exist "%ASSET_DIR%\voices-v1.0.bin" (
+    echo Kokoro voices file already exists, skipping download.
+) else (
+    echo Downloading voices-v1.0.bin...
+    powershell -Command ^
+      "Invoke-WebRequest -Uri 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' -OutFile '%ASSET_DIR%\voices-v1.0.bin'"
 
-echo Downloading voices-v1.0.bin...
-powershell -Command ^
-  "Invoke-WebRequest -Uri 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' -OutFile '%ASSET_DIR%\voices-v1.0.bin'"
+    if not exist "%ASSET_DIR%\voices-v1.0.bin" (
+        echo Failed to download voices-v1.0.bin
+        pause
+        exit /b 1
+    )
 
-if not exist "%ASSET_DIR%\voices-v1.0.bin" (
-    echo Failed to download voices-v1.0.bin
-    pause
-    exit /b 1
+    echo Kokoro model files downloaded successfully.
+    echo.
 )
-
-echo Kokoro model files downloaded successfully.
-echo.
 
 echo Setting up the project Python environment...
 cd "%TARGET_DIR%"
