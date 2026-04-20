@@ -128,7 +128,7 @@ class Persona:
 
 @dataclass
 class LLMConfig:
-    model: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_LLM_MODEL", "gemini-2.5-flash"))
+    model: str = field(default_factory=lambda: _env("PIPECAT_DEFAULT_LLM_MODEL", "qwen/qwen3-32b"))
     temperature: float = 0.6
     max_tokens: int = 1024
     system_prompt: str = (
