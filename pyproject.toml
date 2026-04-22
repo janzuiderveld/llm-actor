@@ -10,7 +10,7 @@ authors = [{name = "Jan Zuiderveld, Grigore Burloiu, Lorena Cocora"}]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "pipecat-ai[deepgram,google,groq,local,silero,local-smart-turn-v3]",
+    "pipecat-ai[deepgram,google,groq,local,silero,local-smart-turn-v3]==0.0.94",
     "pyaec",
     "kokoro",
     "kokoro-onnx",
@@ -24,6 +24,9 @@ dependencies = [
     "onnxruntime",
     "useful-moonshine-onnx",
     "keyboard",
+    "deepgram-sdk==4.7.0",
+    "opencv-python",
+    "google-genai"
 ]
 
 [project.optional-dependencies]
